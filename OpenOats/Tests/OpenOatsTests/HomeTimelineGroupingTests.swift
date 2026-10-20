@@ -71,7 +71,7 @@ final class HomeTimelineGroupingTests: XCTestCase {
         ])
     }
 
-    func testEntriesWithinDaySortByStartTime() {
+    func testEntriesWithinTodaySortNewestFirst() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
 
@@ -95,7 +95,34 @@ final class HomeTimelineGroupingTests: XCTestCase {
         )
 
         XCTAssertEqual(groups.count, 1)
-        XCTAssertEqual(groups[0].entries.map(\.id), ["session:early", "calendar:late"])
+        XCTAssertEqual(groups[0].entries.map(\.id), ["calendar:late", "session:early"])
+    }
+
+    func testEntriesWithinFutureDaySortAsAgenda() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+
+        let reference = makeDate(year: 2026, month: 5, day: 6, hour: 12, minute: 0, calendar: calendar)
+        let late = makeEvent(
+            id: "late",
+            title: "Late",
+            start: makeDate(year: 2026, month: 5, day: 7, hour: 16, minute: 0, calendar: calendar)
+        )
+        let early = makeEvent(
+            id: "early",
+            title: "Early",
+            start: makeDate(year: 2026, month: 5, day: 7, hour: 9, minute: 0, calendar: calendar)
+        )
+
+        let groups = HomeTimelineGrouping.groups(
+            calendarEvents: [late, early],
+            savedSessions: [],
+            referenceDate: reference,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups[0].entries.map(\.id), ["calendar:early", "calendar:late"])
     }
 
     func testSavedSessionLimitIsApplied() {
@@ -113,7 +140,7 @@ final class HomeTimelineGroupingTests: XCTestCase {
             referenceDate: reference
         )
 
-        XCTAssertEqual(groups.flatMap(\.entries).map(\.id), ["session:two", "session:one"])
+        XCTAssertEqual(groups.flatMap(\.entries).map(\.id), ["session:one", "session:two"])
     }
 
     private func makeEvent(id: String, title: String, start: Date) -> CalendarEvent {

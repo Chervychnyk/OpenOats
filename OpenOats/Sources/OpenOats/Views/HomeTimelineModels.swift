@@ -87,7 +87,10 @@ enum HomeTimelineGrouping {
             .map { day in
                 HomeTimelineDayGroup(
                     date: day,
-                    entries: grouped[day, default: []].sorted(by: entrySort)
+                    // Future days read as an agenda; today and the past show newest first.
+                    entries: grouped[day, default: []].sorted { lhs, rhs in
+                        day > referenceDay ? entrySort(lhs, rhs) : entrySort(rhs, lhs)
+                    }
                 )
             }
     }
