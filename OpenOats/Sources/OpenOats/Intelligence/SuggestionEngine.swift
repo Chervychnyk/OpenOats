@@ -179,7 +179,8 @@ final class SuggestionEngine {
                 messages: statePrompt,
                 maxTokens: 512,
                 baseURL: llmBaseURL(forRealtime: false),
-                transport: settings.activeLLMTransport
+                transport: settings.activeLLMTransport,
+                disableReasoning: true
             )
 
             let jsonString = extractJSON(from: response)
@@ -394,7 +395,8 @@ final class SuggestionEngine {
                 messages: messages,
                 maxTokens: 200,
                 baseURL: llmBaseURL(forRealtime: true),
-                transport: settings.activeLLMTransport
+                transport: settings.activeLLMTransport,
+                disableReasoning: true
             )
 
             var accumulated = ""

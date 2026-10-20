@@ -101,6 +101,13 @@ actor OpenRouterClient {
         let max_completion_tokens: Int?
         let temperature: Double?
         let plugins: [WebSearchPlugin]?
+        var reasoning_effort: String? = nil
+    }
+
+    /// Ollama's OpenAI endpoint ignores `think`, so thinking models (Gemma 4, Qwen 3.x)
+    /// spend the whole budget on reasoning unless `reasoning_effort` is "none".
+    static func reasoningEffort(for url: URL) -> String? {
+        url.port == 11434 ? "none" : nil
     }
 
     /// Whether a URL points to a host that supports the `max_completion_tokens`
@@ -185,7 +192,8 @@ actor OpenRouterClient {
         messages: [Message],
         maxTokens: Int = 1024,
         baseURL: URL? = nil,
-        transport: CompletionTransport = .chatCompletions
+        transport: CompletionTransport = .chatCompletions,
+        disableReasoning: Bool = false
     ) -> AsyncThrowingStream<String, Error> {
         if transport == .anthropicMessages {
             return streamAnthropicCompletion(
@@ -213,7 +221,8 @@ actor OpenRouterClient {
                         max_tokens: useNewParam ? nil : maxTokens,
                         max_completion_tokens: useNewParam ? maxTokens : nil,
                         temperature: nil,
-                        plugins: nil
+                        plugins: nil,
+                        reasoning_effort: disableReasoning ? Self.reasoningEffort(for: targetURL) : nil
                     )
 
                     var urlRequest = URLRequest(url: targetURL)
@@ -294,7 +303,8 @@ actor OpenRouterClient {
         baseURL: URL? = nil,
         webSearch: Bool = false,
         transport: CompletionTransport = .chatCompletions,
-        requestTimeout: TimeInterval = 300
+        requestTimeout: TimeInterval = 300,
+        disableReasoning: Bool = false
     ) async throws -> String {
         let result = try await completeWithMetadata(
             apiKey: apiKey,
@@ -305,7 +315,8 @@ actor OpenRouterClient {
             baseURL: baseURL,
             webSearch: webSearch,
             transport: transport,
-            requestTimeout: requestTimeout
+            requestTimeout: requestTimeout,
+            disableReasoning: disableReasoning
         )
         return result.text
     }
@@ -325,7 +336,8 @@ actor OpenRouterClient {
         baseURL: URL? = nil,
         webSearch: Bool = false,
         transport: CompletionTransport = .chatCompletions,
-        requestTimeout: TimeInterval = 300
+        requestTimeout: TimeInterval = 300,
+        disableReasoning: Bool = false
     ) async throws -> CompletionResult {
         if transport == .anthropicMessages {
             return try await completeAnthropic(
@@ -351,7 +363,8 @@ actor OpenRouterClient {
             max_tokens: useNewParam ? nil : maxTokens,
             max_completion_tokens: useNewParam ? maxTokens : nil,
             temperature: temperature,
-            plugins: webSearch ? [.default] : nil
+            plugins: webSearch ? [.default] : nil,
+            reasoning_effort: disableReasoning ? Self.reasoningEffort(for: targetURL) : nil
         )
         var urlRequest = URLRequest(url: targetURL)
         urlRequest.httpMethod = "POST"

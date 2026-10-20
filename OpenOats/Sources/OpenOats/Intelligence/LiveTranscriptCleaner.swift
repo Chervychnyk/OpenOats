@@ -201,7 +201,8 @@ actor LiveTranscriptCleaner {
                 messages: messages,
                 maxTokens: 512,
                 baseURL: baseURL,
-                transport: transport
+                transport: transport,
+                disableReasoning: true
             )
 
             let trimmed = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)

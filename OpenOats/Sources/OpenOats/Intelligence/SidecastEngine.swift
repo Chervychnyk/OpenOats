@@ -92,7 +92,8 @@ final class SidecastEngine {
                     baseURL: self.llmBaseURL,
                     webSearch: useWebSearch,
                     transport: self.settings.activeLLMTransport,
-                    requestTimeout: Self.liveGenerationTimeout
+                    requestTimeout: Self.liveGenerationTimeout,
+                    disableReasoning: true
                 )
                 let decoded = try self.decodeResponse(response)
 

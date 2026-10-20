@@ -15,6 +15,13 @@ final class OpenRouterClientTests: XCTestCase {
         XCTAssertNil(url("not a url"))
     }
 
+    func testReasoningDisabledOnlyForOllama() throws {
+        let ollama = try XCTUnwrap(URL(string: "http://localhost:11434/v1/chat/completions"))
+        let openRouter = try XCTUnwrap(URL(string: "https://openrouter.ai/api/v1/chat/completions"))
+        XCTAssertEqual(OpenRouterClient.reasoningEffort(for: ollama), "none")
+        XCTAssertNil(OpenRouterClient.reasoningEffort(for: openRouter))
+    }
+
     func testPreflightErrorRequiresAPIKeyForOpenRouterHost() throws {
         let url = try XCTUnwrap(URL(string: "https://openrouter.ai/api/v1/chat/completions"))
 
