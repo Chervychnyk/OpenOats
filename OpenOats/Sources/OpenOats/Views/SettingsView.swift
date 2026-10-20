@@ -534,12 +534,6 @@ private struct TranscriptionSettingsTab: View {
                     .font(.system(size: 12))
                     .accessibilityIdentifier("settings.transcriptionModelPicker")
 
-                    if !TranscriptionModel.qwen3ASR06B.isAvailable {
-                        Text("Qwen3 ASR requires macOS 15 or later. Parakeet and Whisper are available on this Mac.")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                    }
-
                     if settings.transcriptionModel.isCloud {
                         switch settings.transcriptionModel {
                         case .assemblyAI:

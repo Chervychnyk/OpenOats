@@ -338,6 +338,7 @@ enum DiarizationVariant: String, CaseIterable, Identifiable {
 enum TranscriptionModel: String, CaseIterable, Identifiable {
     case parakeetV2
     case parakeetV3
+    case parakeetUltra
     case qwen3ASR06B
     case whisperBase
     case whisperSmall
@@ -346,9 +347,9 @@ enum TranscriptionModel: String, CaseIterable, Identifiable {
     case elevenLabsScribe
     case cohereTranscribeArabic
 
-    /// Qwen3's FluidAudio backend uses macOS 15-only APIs.
+    /// FluidAudio 0.17 dropped Qwen3 ASR; the case stays so saved selections fall back cleanly.
     func isSupported(on version: OperatingSystemVersion) -> Bool {
-        self != .qwen3ASR06B || version.majorVersion >= 15
+        self != .qwen3ASR06B
     }
 
     var isAvailable: Bool {
@@ -377,6 +378,7 @@ enum TranscriptionModel: String, CaseIterable, Identifiable {
         switch self {
         case .parakeetV2: "Parakeet TDT v2"
         case .parakeetV3: "Parakeet TDT v3"
+        case .parakeetUltra: "Parakeet Ultra"
         case .qwen3ASR06B: "Qwen3 ASR 0.6B"
         case .whisperBase: "Whisper Base"
         case .whisperSmall: "Whisper Small"
@@ -389,7 +391,7 @@ enum TranscriptionModel: String, CaseIterable, Identifiable {
 
     var downloadPrompt: String {
         switch self {
-        case .parakeetV2, .parakeetV3:
+        case .parakeetV2, .parakeetV3, .parakeetUltra:
             "Transcription requires a one-time model download."
         case .qwen3ASR06B:
             "Qwen3 ASR requires a one-time model download."
@@ -413,7 +415,7 @@ enum TranscriptionModel: String, CaseIterable, Identifiable {
         case .whisperBase: 142_000_000
         case .whisperSmall: 244_000_000
         case .whisperLargeV3Turbo: 800_000_000
-        case .parakeetV2, .parakeetV3, .qwen3ASR06B: nil
+        case .parakeetV2, .parakeetV3, .parakeetUltra, .qwen3ASR06B: nil
         case .assemblyAI, .elevenLabsScribe, .cohereTranscribeArabic: nil
         }
     }
@@ -426,7 +428,7 @@ enum TranscriptionModel: String, CaseIterable, Identifiable {
         switch self {
         case .qwen3ASR06B:
             "Language Hint"
-        case .parakeetV2, .parakeetV3, .whisperBase, .whisperSmall, .whisperLargeV3Turbo:
+        case .parakeetV2, .parakeetV3, .parakeetUltra, .whisperBase, .whisperSmall, .whisperLargeV3Turbo:
             "Locale"
         case .assemblyAI, .elevenLabsScribe, .cohereTranscribeArabic:
             "Language Hint"
@@ -439,6 +441,8 @@ enum TranscriptionModel: String, CaseIterable, Identifiable {
             "Parakeet TDT v2 is English-only. Use en-US. This language value is still saved with the session and markdown export."
         case .parakeetV3:
             "Parakeet TDT v3 auto-detects speech language. Use this field to set your expected meeting language for metadata and export."
+        case .parakeetUltra:
+            "Parakeet Ultra auto-detects speech language. Use this field to set your expected meeting language for metadata and export."
         case .qwen3ASR06B:
             "Used as a language hint for Qwen3 ASR and saved with the session. Enter a locale such as en-US, fr-FR, or ja-JP."
         case .whisperBase, .whisperSmall:
@@ -468,11 +472,9 @@ enum TranscriptionModel: String, CaseIterable, Identifiable {
         switch self {
         case .parakeetV2: return ParakeetBackend(version: .v2, customVocabulary: customVocabulary)
         case .parakeetV3: return ParakeetBackend(version: .v3, customVocabulary: customVocabulary)
+        case .parakeetUltra: return ParakeetBackend(version: .ultra, customVocabulary: customVocabulary)
         case .qwen3ASR06B:
-            if #available(macOS 15, *) {
-                return Qwen3Backend()
-            }
-            return ParakeetBackend(version: .v2, customVocabulary: customVocabulary)
+            return availableModel.makeBackend(customVocabulary: customVocabulary, apiKey: apiKey, removeFillerWords: removeFillerWords)
         case .whisperBase: return WhisperKitBackend(variant: .base)
         case .whisperSmall: return WhisperKitBackend(variant: .small)
         case .whisperLargeV3Turbo: return WhisperKitBackend(variant: .largeV3Turbo)
@@ -488,7 +490,7 @@ enum TranscriptionModel: String, CaseIterable, Identifiable {
         switch self {
         case .whisperBase, .whisperSmall, .whisperLargeV3Turbo:
             10 * 16_000
-        case .parakeetV2, .parakeetV3, .qwen3ASR06B:
+        case .parakeetV2, .parakeetV3, .parakeetUltra, .qwen3ASR06B:
             5 * 16_000
         case .assemblyAI, .elevenLabsScribe, .cohereTranscribeArabic:
             10 * 16_000  // 10s - fewer API calls, better accuracy per segment
@@ -497,7 +499,7 @@ enum TranscriptionModel: String, CaseIterable, Identifiable {
 
     /// Models suitable for offline batch re-transcription.
     static var batchSuitableModels: [TranscriptionModel] {
-        [.parakeetV2, .parakeetV3, .whisperSmall, .whisperLargeV3Turbo, .qwen3ASR06B].filter(\.isAvailable)
+        [.parakeetV2, .parakeetV3, .parakeetUltra, .whisperSmall, .whisperLargeV3Turbo, .qwen3ASR06B].filter(\.isAvailable)
     }
 }
 

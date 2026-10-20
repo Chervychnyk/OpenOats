@@ -10,7 +10,11 @@ final class ParakeetBackend: TranscriptionBackend, @unchecked Sendable {
 
     init(version: AsrModelVersion, customVocabulary: String = "") {
         self.version = version
-        self.displayName = version == .v2 ? "Parakeet TDT v2" : "Parakeet TDT v3"
+        switch version {
+        case .v2: self.displayName = "Parakeet TDT v2"
+        case .ultra: self.displayName = "Parakeet Ultra"
+        default: self.displayName = "Parakeet TDT v3"
+        }
     }
 
     func checkStatus() -> BackendStatus {
@@ -47,7 +51,9 @@ final class ParakeetBackend: TranscriptionBackend, @unchecked Sendable {
         guard let asrManager else {
             throw TranscriptionBackendError.notPrepared
         }
-        let result = try await asrManager.transcribe(samples)
+        // Fresh state per segment, as the old transcribe(samples) reset it after each call.
+        var decoderState = TdtDecoderState.make(decoderLayers: await asrManager.decoderLayerCount)
+        let result = try await asrManager.transcribe(samples, decoderState: &decoderState)
         return result.text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
