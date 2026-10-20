@@ -797,11 +797,11 @@ final class LiveSessionController {
         // Titles derive from the final binding, not the start-time one, so a
         // rebound session is not persisted under the old event's name.
         // `endingMetadata?.title` covers sessions with no calendar event
-        // (e.g. titled by the detected meeting app); an explicit live topic
-        // still wins below.
-        let metadataTitle = calendarEvent?.title ?? endingMetadata?.title
-        let title = coordinator.transcriptStore.conversationState.currentTopic.isEmpty
-            ? metadataTitle : coordinator.transcriptStore.conversationState.currentTopic
+        // (e.g. titled by the detected meeting app). A calendar title wins over
+        // the live topic, which only reflects the last minutes of the meeting;
+        // the live topic still beats a generic meeting-app title.
+        let liveTopic = coordinator.transcriptStore.conversationState.currentTopic
+        let title = calendarEvent?.title ?? (liveTopic.isEmpty ? endingMetadata?.title : liveTopic)
         let meetingAppName = endingMetadata?.detectionContext?.meetingApp?.name
 
         let engineName = settings?.transcriptionModel.rawValue
