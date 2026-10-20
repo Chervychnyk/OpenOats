@@ -135,7 +135,7 @@ struct ContentView: View {
                 if controllerState.showLiveTranscript {
                     DisclosureGroup(isExpanded: $isTranscriptExpanded) {
                         IsolatedTranscriptWrapper(state: controllerState)
-                            .frame(height: 150)
+                            .frame(minHeight: 150, maxHeight: .infinity)
                     } label: {
                         HStack(spacing: 6) {
                             Text("Transcript")
@@ -210,7 +210,8 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
 
-            if controllerState.isRunning {
+            // An expanded transcript takes the free height instead of the spacer.
+            if controllerState.isRunning && !(controllerState.showLiveTranscript && isTranscriptExpanded) {
                 Spacer(minLength: 0)
             }
 
