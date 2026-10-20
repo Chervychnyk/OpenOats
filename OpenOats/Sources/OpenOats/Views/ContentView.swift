@@ -133,13 +133,24 @@ struct ContentView: View {
             if controllerState.isRunning {
                 // Collapsible transcript (hidden when live transcript is disabled)
                 if controllerState.showLiveTranscript {
-                    DisclosureGroup(isExpanded: $isTranscriptExpanded) {
-                        IsolatedTranscriptWrapper(state: controllerState)
-                            .frame(minHeight: 150, maxHeight: .infinity)
-                    } label: {
+                    // Not a DisclosureGroup: on macOS it sizes content to its ideal height,
+                    // so a long transcript pushed the notes and control bar out of the window.
+                    VStack(spacing: 8) {
                         HStack(spacing: 6) {
-                            Text("Transcript")
-                                .font(.system(size: 12, weight: .medium))
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.15)) { isTranscriptExpanded.toggle() }
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 10, weight: .semibold))
+                                        .foregroundStyle(.secondary)
+                                        .rotationEffect(.degrees(isTranscriptExpanded ? 90 : 0))
+                                    Text("Transcript")
+                                        .font(.system(size: 12, weight: .medium))
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
                             if !controllerState.liveTranscript.isEmpty {
                                 Text("(\(controllerState.liveTranscript.count))")
                                     .font(.system(size: 11))
@@ -189,6 +200,12 @@ struct ContentView: View {
                                 .buttonStyle(.plain)
                                 .help("Copy transcript")
                             }
+                        }
+                        if isTranscriptExpanded {
+                            IsolatedTranscriptWrapper(state: controllerState)
+                                // No minimum height: it gives way so short windows don't overflow.
+                                .frame(maxHeight: .infinity)
+                                .transition(.opacity.combined(with: .move(edge: .top)))
                         }
                     }
                     .padding(.horizontal, 16)
