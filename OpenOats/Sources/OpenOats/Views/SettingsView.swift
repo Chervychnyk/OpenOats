@@ -1614,7 +1614,9 @@ private struct FixedLeftTextEditor: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let tv = NSTextView()
+        // A bare NSTextView() has a zero frame and never resizes, so pasted text is invisible.
+        let sv = NSTextView.scrollableTextView()
+        guard let tv = sv.documentView as? NSTextView else { return sv }
         tv.isEditable = true
         tv.isSelectable = true
         tv.isRichText = false
@@ -1625,8 +1627,6 @@ private struct FixedLeftTextEditor: NSViewRepresentable {
         tv.drawsBackground = false
         tv.delegate = context.coordinator
 
-        let sv = NSScrollView()
-        sv.documentView = tv
         sv.hasVerticalScroller = true
         sv.autohidesScrollers = true
         sv.drawsBackground = false
