@@ -5,6 +5,19 @@ final class TranscriptionBackendTests: XCTestCase {
 
     // MARK: - ParakeetBackend
 
+    func testWhisperRemovesKnownHallucinations() {
+        XCTAssertEqual(
+            WhisperKitManager.removingKnownHallucinations("То есть, бэкэнд хостит Swagger. Продолжение следует..."),
+            "То есть, бэкэнд хостит Swagger."
+        )
+        XCTAssertEqual(
+            WhisperKitManager.removingKnownHallucinations("Они не из-за наш пост. Субтитры создавал DimaTorzok"),
+            "Они не из-за наш пост."
+        )
+        XCTAssertEqual(WhisperKitManager.removingKnownHallucinations("Продолжение следует."), "")
+        XCTAssertEqual(WhisperKitManager.removingKnownHallucinations("Это продолжение темы."), "Это продолжение темы.")
+    }
+
     func testParakeetLatinVocabularyDropsNonLatinTermsAndAliases() {
         let input = "Postman: постман, post man\nSwagger: свагер\nФиттер: fitter\n\nCafé"
         XCTAssertEqual(ParakeetBackend.latinVocabulary(input), "Postman: post man\nSwagger\nCafé")

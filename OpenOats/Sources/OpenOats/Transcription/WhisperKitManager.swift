@@ -83,7 +83,30 @@ final class WhisperKitManager: @unchecked Sendable {
             promptTokens: promptTokens
         )
         let results = try await pipe.transcribe(audioArray: samples, decodeOptions: options)
-        return results.map { $0.text }.joined(separator: " ")
+        return Self.removingKnownHallucinations(results.map { $0.text }.joined(separator: " "))
+    }
+
+    /// Credits and sign-offs from video subtitles in Whisper's training data. On silence or
+    /// trailing noise it appends them to real speech, e.g. "…то есть бэкэнд хостит Swagger. Продолжение следует..."
+    // Computed, not stored: Regex is not Sendable, so a static let fails Swift 6 concurrency checks.
+    private static var knownHallucinations: [Regex<Substring>] {
+        [
+            #/(?i)продолжение следует\.*/#,
+            #/(?i)субтитры (?:создавал|сделал|делал)\s+\S+/#,
+            #/(?i)редактор субтитров[^.]*(?:\.[^.]*корректор[^.]*)?\.?/#,
+            #/(?i)спасибо за просмотр\.?/#,
+            #/(?i)thanks for watching!?/#,
+            #/(?i)subtitles by the amara\.org community/#,
+        ]
+    }
+
+    static func removingKnownHallucinations(_ text: String) -> String {
+        var result = text
+        for pattern in knownHallucinations {
+            result = result.replacing(pattern, with: "")
+        }
+        return result
+            .replacing(#/\s{2,}/#, with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
