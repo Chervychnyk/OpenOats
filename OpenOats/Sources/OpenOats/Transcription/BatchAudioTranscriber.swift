@@ -580,18 +580,14 @@ actor BatchAudioTranscriber {
             var batchDiarizer: DiarizationManager?
             let useElevenLabsNativeDiarization = enableDiarization && model == .elevenLabsScribe
             if enableDiarization && !useElevenLabsNativeDiarization {
-                Log.batchTranscription.info("Running LS-EEND diarization on system audio...")
+                Log.batchTranscription.info("Running offline diarization on system audio...")
                 let dm = DiarizationManager()
-                let variant = diarizationVariant.lseendVariant
-                try await dm.load(variant: variant)
-                // Process complete audio file through diarizer
                 let samples = try BatchAudioSampleReader.readAll(
                     url: sysURL,
                     targetRate: 16000,
                     overrideSampleRate: anchors?.sysSampleRate
                 )
-                try await dm.feedAudio(samples)
-                await dm.finalize()
+                try await dm.diarizeOffline(samples)
                 batchDiarizer = dm
                 Log.batchTranscription.info("Diarization complete")
             } else if useElevenLabsNativeDiarization {

@@ -27,4 +27,16 @@ final class DiarizerSpeakerMappingTests: XCTestCase {
     func testNegativeIndexIsTreatedAsTheFirstCluster() {
         XCTAssertEqual(DiarizationManager.speaker(forDiarizerIndex: -1), .them)
     }
+
+    // Offline speaker IDs are arbitrary strings; whoever speaks first becomes index 0 ("Them").
+    func testOfflineSpansAreIndexedByFirstAppearance() {
+        typealias Span = DiarizationManager.SpeakerSpan
+        let spans = DiarizationManager.indexedSpans([
+            (id: "S1", span: Span(start: 10, end: 12)),
+            (id: "S2", span: Span(start: 0, end: 4)),
+            (id: "S2", span: Span(start: 20, end: 22)),
+        ])
+        XCTAssertEqual(spans[0], [Span(start: 0, end: 4), Span(start: 20, end: 22)])
+        XCTAssertEqual(spans[1], [Span(start: 10, end: 12)])
+    }
 }

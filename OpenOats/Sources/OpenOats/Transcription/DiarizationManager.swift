@@ -7,6 +7,13 @@ import Foundation
 actor DiarizationManager {
     private nonisolated(unsafe) let diarizer = LSEENDDiarizer()
     private var isInitialized = false
+    /// Set by `diarizeOffline`; replaces the LS-EEND timeline for batch attribution.
+    private var offlineSegments: [Int: [SpeakerSpan]]?
+
+    struct SpeakerSpan: Equatable {
+        let start: Float
+        let end: Float
+    }
 
     /// Load the LS-EEND model for the given variant. Must be called before feedAudio/dominantSpeaker.
     func load(variant: LSEENDVariant = .dihard3) async throws {
@@ -24,12 +31,41 @@ actor DiarizationManager {
         _ = try diarizer.process()
     }
 
+    /// Diarize a whole recording with FluidAudio's offline pipeline (pyannote segmentation + VBx clustering).
+    /// LS-EEND is a streaming model and merged distinct remote voices into one on real meetings.
+    func diarizeOffline(_ samples: [Float]) async throws {
+        let manager = OfflineDiarizerManager()
+        manager.initialize(models: try await OfflineDiarizerModels.load())
+        let result = try await manager.process(audio: samples)
+        offlineSegments = Self.indexedSpans(
+            result.segments.map { (id: $0.speakerId, span: SpeakerSpan(start: $0.startTimeSeconds, end: $0.endTimeSeconds)) }
+        )
+    }
+
+    /// Numbers speakers by first appearance, so whoever speaks first stays `.them`.
+    nonisolated static func indexedSpans(_ segments: [(id: String, span: SpeakerSpan)]) -> [Int: [SpeakerSpan]] {
+        var indexByID: [String: Int] = [:]
+        var spans: [Int: [SpeakerSpan]] = [:]
+        for segment in segments.sorted(by: { $0.span.start < $1.span.start }) {
+            let index = indexByID[segment.id] ?? indexByID.count
+            indexByID[segment.id] = index
+            spans[index, default: []].append(segment.span)
+        }
+        return spans
+    }
+
+    private var spansBySpeaker: [Int: [SpeakerSpan]] {
+        if let offlineSegments { return offlineSegments }
+        return diarizer.timeline.speakers.mapValues { speaker in
+            (speaker.finalizedSegments + speaker.tentativeSegments).map { SpeakerSpan(start: $0.startTime, end: $0.endTime) }
+        }
+    }
+
     /// Returns the dominant speaker for a given time range in seconds.
     /// Queries the DiarizerTimeline and finds which speaker has the most
     /// speech frames overlapping [startTime, endTime].
     func dominantSpeaker(from startTime: TimeInterval, to endTime: TimeInterval) -> Speaker {
-        let timeline = diarizer.timeline
-        let speakers = timeline.speakers
+        let speakers = spansBySpeaker
 
         guard !speakers.isEmpty else { return .them }
 
@@ -39,13 +75,12 @@ actor DiarizationManager {
         let queryStart = Float(startTime)
         let queryEnd = Float(endTime)
 
-        for (index, speaker) in speakers {
-            let allSegments = speaker.finalizedSegments + speaker.tentativeSegments
+        for (index, spans) in speakers {
             var overlap: Float = 0
 
-            for segment in allSegments {
-                let overlapStart = max(segment.startTime, queryStart)
-                let overlapEnd = min(segment.endTime, queryEnd)
+            for segment in spans {
+                let overlapStart = max(segment.start, queryStart)
+                let overlapEnd = min(segment.end, queryEnd)
                 if overlapEnd > overlapStart {
                     overlap += overlapEnd - overlapStart
                 }
@@ -82,14 +117,13 @@ actor DiarizationManager {
     /// These runs can be used to split a longer speech segment into
     /// smaller speaker-consistent chunks.
     func speakerRuns(from startTime: TimeInterval, to endTime: TimeInterval) -> [BatchTranscriptionSegmentLayout.SpeakerRun] {
-        let timeline = diarizer.timeline
-        let speakers = timeline.speakers
+        let speakers = spansBySpeaker
 
         guard !speakers.isEmpty else { return [] }
 
         let queryStart = Float(startTime)
         let queryEnd = Float(endTime)
-        let activeSpeakers = speakers.filter { $0.value.hasSegments }
+        let activeSpeakers = speakers.filter { !$0.value.isEmpty }
 
         // One voice owns the whole range; label it the same way dominantSpeaker would.
         if activeSpeakers.count <= 1 {
@@ -104,12 +138,11 @@ actor DiarizationManager {
 
         var runs: [BatchTranscriptionSegmentLayout.SpeakerRun] = []
 
-        for (index, speaker) in speakers {
+        for (index, spans) in speakers {
             let mappedSpeaker = Self.speaker(forDiarizerIndex: index)
-            let allSegments = speaker.finalizedSegments + speaker.tentativeSegments
-            for segment in allSegments {
-                let overlapStart = max(segment.startTime, queryStart)
-                let overlapEnd = min(segment.endTime, queryEnd)
+            for segment in spans {
+                let overlapStart = max(segment.start, queryStart)
+                let overlapEnd = min(segment.end, queryEnd)
                 guard overlapEnd > overlapStart else { continue }
                 runs.append(
                     BatchTranscriptionSegmentLayout.SpeakerRun(
