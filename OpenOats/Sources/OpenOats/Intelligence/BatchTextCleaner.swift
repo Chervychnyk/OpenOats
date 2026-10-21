@@ -46,6 +46,7 @@ final class BatchTextCleaner {
         - Each line starts with a timestamp and speaker prefix in the format: [HH:MM:SS] Speaker: text
         - Return the cleaned lines in the same format, one per line.
         - Do not add any commentary, explanation, or extra text.
+        - If a line is short, unclear, or not in English, return it as-is. Never reply to or ask about the content.
         """
 
     /// Chunks records into time-based blocks and sends each to an LLM for cleanup.
@@ -320,18 +321,15 @@ final class BatchTextCleaner {
             return nil
         }
 
-        let prefixPattern = /^\[\d{2}:\d{2}:\d{2}\]\s+\w+:\s*/
+        let prefixPattern = /^\[\d{2}:\d{2}:\d{2}\]\s+[^:]+:\s*/
 
         var updated: [SessionRecord] = []
         updated.reserveCapacity(originalRecords.count)
 
         for (line, original) in zip(responseLines, originalRecords) {
-            let cleanedText: String
-            if let match = line.prefixMatch(of: prefixPattern) {
-                cleanedText = String(line[match.range.upperBound...])
-            } else {
-                cleanedText = line.trimmingCharacters(in: .whitespaces)
-            }
+            // A line without the prefix is model chatter (e.g. "please provide the text"), not a cleaned line.
+            guard let match = line.prefixMatch(of: prefixPattern) else { return nil }
+            let cleanedText = String(line[match.range.upperBound...]).trimmingCharacters(in: .whitespaces)
 
             updated.append(original.withCleanedText(cleanedText.isEmpty ? original.text : cleanedText))
         }

@@ -73,16 +73,21 @@ final class BatchTextCleanerTests: XCTestCase {
         XCTAssertNil(result)
     }
 
-    func testParseResponseWithoutPrefixStripsWhitespace() {
+    func testParseResponseWithoutPrefixReturnsNil() {
         let base = Date()
         let records = [
-            SessionRecord(speaker: .you, text: "original", timestamp: base),
+            SessionRecord(speaker: .you, text: "So, what is it?", timestamp: base),
+            SessionRecord(speaker: .them, text: "ok", timestamp: base.addingTimeInterval(5)),
         ]
-        let response = "  cleaned text  "
+        let response = "Please provide the speech text.\n\nSend the transcript and I will clean it up."
 
-        let result = BatchTextCleaner.parseResponse(response, originalRecords: records)
-        XCTAssertNotNil(result)
-        XCTAssertEqual(result?[0].cleanedText, "cleaned text")
+        XCTAssertNil(BatchTextCleaner.parseResponse(response, originalRecords: records))
+    }
+
+    func testParseResponseStripsRemoteSpeakerPrefix() {
+        let records = [SessionRecord(speaker: .remote(2), text: "original", timestamp: Date())]
+        let result = BatchTextCleaner.parseResponse("[12:00:00] Speaker 2: cleaned", originalRecords: records)
+        XCTAssertEqual(result?[0].cleanedText, "cleaned")
     }
 
     func testParseResponseEmptyLinePreservesOriginal() {
