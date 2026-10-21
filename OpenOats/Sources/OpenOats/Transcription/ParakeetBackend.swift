@@ -56,7 +56,7 @@ final class ParakeetBackend: TranscriptionBackend, @unchecked Sendable {
         _ text: String,
         onStatus: @Sendable (String) -> Void
     ) async -> VocabularyBoostingSession? {
-        let vocab = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let vocab = latinVocabulary(text)
         guard !vocab.isEmpty else { return nil }
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("openoats-custom-vocabulary-\(UUID().uuidString).txt")
@@ -76,6 +76,25 @@ final class ParakeetBackend: TranscriptionBackend, @unchecked Sendable {
             Log.transcription.error("Custom vocabulary disabled: \(error, privacy: .public)")
             return nil
         }
+    }
+
+    /// The CTC spotter is English-only, so non-Latin terms and aliases ("постман") only let it match
+    /// ordinary words in other languages. They still reach the LLM cleanup prompt.
+    static func latinVocabulary(_ text: String) -> String {
+        func isLatin(_ s: String) -> Bool {
+            s.unicodeScalars.allSatisfy { !$0.properties.isAlphabetic || $0.value < 0x0250 }
+        }
+        return text.split(whereSeparator: \.isNewline).compactMap { line -> String? in
+            let parts = line.split(separator: ":", maxSplits: 1)
+            guard let term = parts.first?.trimmingCharacters(in: .whitespaces), !term.isEmpty, isLatin(term) else {
+                return nil
+            }
+            let aliases = parts.dropFirst().first?
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty && isLatin($0) } ?? []
+            return aliases.isEmpty ? term : "\(term): \(aliases.joined(separator: ", "))"
+        }.joined(separator: "\n")
     }
 
     func transcribe(_ samples: [Float], locale: Locale, previousContext: String? = nil) async throws -> String {

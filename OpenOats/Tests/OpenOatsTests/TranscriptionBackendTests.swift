@@ -5,6 +5,11 @@ final class TranscriptionBackendTests: XCTestCase {
 
     // MARK: - ParakeetBackend
 
+    func testParakeetLatinVocabularyDropsNonLatinTermsAndAliases() {
+        let input = "Postman: постман, post man\nSwagger: свагер\nФиттер: fitter\n\nCafé"
+        XCTAssertEqual(ParakeetBackend.latinVocabulary(input), "Postman: post man\nSwagger\nCafé")
+    }
+
     func testParakeetV2DisplayName() {
         let backend = ParakeetBackend(version: .v2)
         XCTAssertEqual(backend.displayName, "Parakeet TDT v2")
