@@ -307,6 +307,30 @@ final class SessionRepositoryTests: XCTestCase {
         XCTAssertEqual(session.index.transcriptRecovery, .recoveredAfterBatch)
     }
 
+    // Manual cleanup of a batch-transcribed session used to rewrite only the live file,
+    // so the final transcript the UI shows never got the cleaned text.
+    func testBackfillCleanedTextUpdatesFinalTranscriptWhenPresent() async {
+        let sessionID = "session_cleanup_after_batch"
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_030)
+        await repo.seedSession(
+            id: sessionID,
+            records: [SessionRecord(speaker: .you, text: "live text", timestamp: Date(timeIntervalSince1970: 1_700_000_000))],
+            startedAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        await repo.saveFinalTranscript(
+            sessionID: sessionID,
+            records: [SessionRecord(speaker: .them, text: "ну это самое привет", timestamp: timestamp)]
+        )
+
+        await repo.backfillCleanedText(
+            sessionID: sessionID,
+            from: [Utterance(text: "ну это самое привет", speaker: .them, timestamp: timestamp, cleanedText: "Привет.")]
+        )
+
+        let transcript = await repo.loadTranscript(sessionID: sessionID)
+        XCTAssertEqual(transcript.map(\.cleanedText), ["Привет."])
+    }
+
     // MARK: - saveNotes writes both files
 
     func testSaveNotesWritesBothFiles() async {

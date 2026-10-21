@@ -1606,10 +1606,14 @@ actor SessionRepository {
     }
 
     func backfillCleanedText(sessionID: String, from utterances: [Utterance]) {
-        let liveURL = sessionDirectory(for: sessionID).appendingPathComponent("transcript.live.jsonl")
-        if FileManager.default.fileExists(atPath: liveURL.path) {
-            rewriteJSONLWithCleanedText(file: liveURL, utterances: utterances)
-            return
+        // Same preference order as loadTranscript: cleanup of a batch-transcribed session must land in the final file.
+        let dir = sessionDirectory(for: sessionID)
+        for name in ["transcript.final.jsonl", "transcript.live.jsonl"] {
+            let url = dir.appendingPathComponent(name)
+            if FileManager.default.fileExists(atPath: url.path) {
+                rewriteJSONLWithCleanedText(file: url, utterances: utterances)
+                return
+            }
         }
 
         // Legacy fallback
