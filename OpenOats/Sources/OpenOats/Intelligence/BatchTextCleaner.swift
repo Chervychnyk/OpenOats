@@ -318,7 +318,9 @@ final class BatchTextCleaner {
                 messages: messages,
                 maxTokens: 4096,
                 baseURL: baseURL,
-                transport: transport
+                transport: transport,
+                // Thinking models (gemma4 on Ollama) otherwise spend the whole token budget reasoning and return nothing.
+                disableReasoning: true
             )
 
             return parseResponse(response, originalRecords: records)
