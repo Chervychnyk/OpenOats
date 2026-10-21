@@ -78,7 +78,7 @@ final class ParakeetBackend: TranscriptionBackend, @unchecked Sendable {
         }
     }
 
-    /// The CTC spotter is English-only, so non-Latin terms and aliases ("постман") only let it match
+    /// The CTC spotter is English-only, so non-Latin terms and aliases (Cyrillic spellings) only let it match
     /// ordinary words in other languages. They still reach the LLM cleanup prompt.
     static func latinVocabulary(_ text: String) -> String {
         func isLatin(_ s: String) -> Bool {

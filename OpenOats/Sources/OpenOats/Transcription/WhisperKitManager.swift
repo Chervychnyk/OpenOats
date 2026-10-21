@@ -87,7 +87,7 @@ final class WhisperKitManager: @unchecked Sendable {
     }
 
     /// Credits and sign-offs from video subtitles in Whisper's training data. On silence or
-    /// trailing noise it appends them to real speech, e.g. "…то есть бэкэнд хостит Swagger. Продолжение следует..."
+    /// trailing noise it appends them to real speech, e.g. Russian "To be continued..." after a real sentence.
     // Computed, not stored: Regex is not Sendable, so a static let fails Swift 6 concurrency checks.
     private static var knownHallucinations: [Regex<Substring>] {
         [

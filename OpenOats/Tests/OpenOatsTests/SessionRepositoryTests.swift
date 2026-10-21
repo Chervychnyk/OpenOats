@@ -319,16 +319,16 @@ final class SessionRepositoryTests: XCTestCase {
         )
         await repo.saveFinalTranscript(
             sessionID: sessionID,
-            records: [SessionRecord(speaker: .them, text: "ну это самое привет", timestamp: timestamp)]
+            records: [SessionRecord(speaker: .them, text: "um hello", timestamp: timestamp)]
         )
 
         await repo.backfillCleanedText(
             sessionID: sessionID,
-            from: [Utterance(text: "ну это самое привет", speaker: .them, timestamp: timestamp, cleanedText: "Привет.")]
+            from: [Utterance(text: "um hello", speaker: .them, timestamp: timestamp, cleanedText: "Hello.")]
         )
 
         let transcript = await repo.loadTranscript(sessionID: sessionID)
-        XCTAssertEqual(transcript.map(\.cleanedText), ["Привет."])
+        XCTAssertEqual(transcript.map(\.cleanedText), ["Hello."])
     }
 
     // MARK: - saveNotes writes both files

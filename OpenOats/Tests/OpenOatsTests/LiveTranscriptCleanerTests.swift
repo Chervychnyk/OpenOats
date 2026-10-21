@@ -4,22 +4,22 @@ import XCTest
 final class LiveTranscriptCleanerTests: XCTestCase {
     func testRejectsChatReplyInsteadOfCleanup() {
         XCTAssertNil(LiveTranscriptCleaner.acceptedCleanup(
-            original: "Хорошо, хорошо, это самое, раз, два.",
-            response: "Пожалуйста, пришлите текст выступления, который нужно обработать. Как только вы его отправите, я очищу его от слов-паразитов."
+            original: "Okay, okay, so, one, two.",
+            response: "Please send the speech text you want processed. As soon as you send it, I will remove the filler words."
         ))
     }
 
     func testAcceptsCleanupAndStripsEchoedTags() {
         XCTAssertEqual(
             LiveTranscriptCleaner.acceptedCleanup(
-                original: "ну это самое мы задеплоили вчера ну и все",
-                response: "<transcript>\nМы задеплоили вчера, и все.\n</transcript>"
+                original: "um so we deployed it yesterday and like that is it",
+                response: "<transcript>\nWe deployed it yesterday, and that is it.\n</transcript>"
             ),
-            "Мы задеплоили вчера, и все."
+            "We deployed it yesterday, and that is it."
         )
     }
 
     func testRejectsEmptyResponse() {
-        XCTAssertNil(LiveTranscriptCleaner.acceptedCleanup(original: "раз два три четыре пять", response: "  "))
+        XCTAssertNil(LiveTranscriptCleaner.acceptedCleanup(original: "one two three four five", response: "  "))
     }
 }

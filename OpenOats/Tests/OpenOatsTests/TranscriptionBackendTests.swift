@@ -7,12 +7,12 @@ final class TranscriptionBackendTests: XCTestCase {
 
     func testWhisperRemovesKnownHallucinations() {
         XCTAssertEqual(
-            WhisperKitManager.removingKnownHallucinations("То есть, бэкэнд хостит Swagger. Продолжение следует..."),
-            "То есть, бэкэнд хостит Swagger."
+            WhisperKitManager.removingKnownHallucinations("The backend hosts Swagger. Продолжение следует..."),
+            "The backend hosts Swagger."
         )
         XCTAssertEqual(
-            WhisperKitManager.removingKnownHallucinations("Они не из-за наш пост. Субтитры создавал DimaTorzok"),
-            "Они не из-за наш пост."
+            WhisperKitManager.removingKnownHallucinations("They are not on our side. Субтитры создавал DimaTorzok"),
+            "They are not on our side."
         )
         XCTAssertEqual(WhisperKitManager.removingKnownHallucinations("Продолжение следует."), "")
         XCTAssertEqual(WhisperKitManager.removingKnownHallucinations("Это продолжение темы."), "Это продолжение темы.")

@@ -222,7 +222,7 @@ actor LiveTranscriptCleaner {
     }
 
     /// Cleanup only removes words and adds punctuation, so a much longer reply is the model
-    /// answering the line ("Пожалуйста, пришлите текст…") rather than cleaning it.
+    /// answering the line (e.g. asking for the text to clean) rather than cleaning it.
     nonisolated static func acceptedCleanup(original: String, response: String) -> String? {
         let cleaned = response
             .replacingOccurrences(of: "<transcript>", with: "")
