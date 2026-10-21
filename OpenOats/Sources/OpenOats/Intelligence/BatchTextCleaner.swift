@@ -50,7 +50,7 @@ final class BatchTextCleaner {
         - If a line is short or unclear, return it as-is. Never reply to or ask about the content.
         """
 
-    /// Appends the user's custom vocabulary so names transcribed in another script ("постман") get their real spelling.
+    /// Appends the user's custom vocabulary so names transcribed in another script or misspelled get their real spelling.
     nonisolated static func systemPrompt(customVocabulary: String) -> String {
         let terms = customVocabulary
             .split(whereSeparator: \.isNewline)
@@ -355,9 +355,18 @@ final class BatchTextCleaner {
             guard let match = line.prefixMatch(of: prefixPattern) else { return nil }
             let cleanedText = String(line[match.range.upperBound...]).trimmingCharacters(in: .whitespaces)
 
-            updated.append(original.withCleanedText(cleanedText.isEmpty ? original.text : cleanedText))
+            let keep = cleanedText.isEmpty || droppedTooMuch(original: original.text, cleaned: cleanedText)
+            updated.append(original.withCleanedText(keep ? original.text : cleanedText))
         }
 
         return updated
+    }
+
+    /// Filler removal drops a few words; losing over a third of a longer line means the model deleted
+    /// garbled speech it couldn't parse instead of keeping it.
+    nonisolated static func droppedTooMuch(original: String, cleaned: String) -> Bool {
+        let originalWords = original.split(whereSeparator: \.isWhitespace).count
+        guard originalWords >= 8 else { return false }
+        return Double(cleaned.split(whereSeparator: \.isWhitespace).count) < Double(originalWords) * 0.67
     }
 }

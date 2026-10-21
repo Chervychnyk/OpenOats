@@ -103,6 +103,25 @@ final class BatchTextCleanerTests: XCTestCase {
         XCTAssertEqual(result?[0].cleanedText, "keep this")
     }
 
+    func testParseResponseKeepsOriginalWhenCleanupDropsTooMuch() {
+        let records = [SessionRecord(
+            speaker: .you,
+            text: "so the point is we discussed standardization uh baku per team so what is the point now there is a process",
+            timestamp: Date()
+        )]
+        let result = BatchTextCleaner.parseResponse(
+            "[12:00:00] You: So the point is we discussed standardization per team.",
+            originalRecords: records
+        )
+        XCTAssertEqual(result?[0].cleanedText, records[0].text)
+    }
+
+    func testParseResponseAcceptsFillerRemoval() {
+        let records = [SessionRecord(speaker: .you, text: "um so like we deployed the new release yesterday to prod", timestamp: Date())]
+        let result = BatchTextCleaner.parseResponse("[12:00:00] You: We deployed the new release yesterday to prod.", originalRecords: records)
+        XCTAssertEqual(result?[0].cleanedText, "We deployed the new release yesterday to prod.")
+    }
+
     // MARK: - systemPrompt
 
     func testSystemPromptListsCustomVocabulary() {
