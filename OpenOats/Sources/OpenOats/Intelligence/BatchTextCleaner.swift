@@ -46,8 +46,27 @@ final class BatchTextCleaner {
         - Each line starts with a timestamp and speaker prefix in the format: [HH:MM:SS] Speaker: text
         - Return the cleaned lines in the same format, one per line.
         - Do not add any commentary, explanation, or extra text.
-        - If a line is short, unclear, or not in English, return it as-is. Never reply to or ask about the content.
+        - Lines may be in any language; keep each line in its original language.
+        - If a line is short or unclear, return it as-is. Never reply to or ask about the content.
         """
+
+    /// Appends the user's custom vocabulary so names transcribed in another script ("постман") get their real spelling.
+    nonisolated static func systemPrompt(customVocabulary: String) -> String {
+        let terms = customVocabulary
+            .split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .prefix(100)
+        guard !terms.isEmpty else { return systemPrompt }
+        return systemPrompt + """
+
+
+            Known terms, one per line as `Term` or `Term: other spellings`. Write each term exactly as spelled \
+            before the colon wherever the transcript clearly means it, even if it was transcribed in another \
+            script or misspelled. Never replace words that do not mean the term.
+            \(terms.map { "- \($0)" }.joined(separator: "\n"))
+            """
+    }
 
     /// Chunks records into time-based blocks and sends each to an LLM for cleanup.
     /// Returns a new array of `SessionRecord` with `cleanedText` populated.
@@ -142,8 +161,9 @@ final class BatchTextCleaner {
 
         let chunks = Self.chunkRecords(records)
         totalChunks = chunks.count
+        let systemPrompt = Self.systemPrompt(customVocabulary: settings.transcriptionCustomVocabulary)
 
-        let task = Task { [weak self, client, apiKey, baseURL, model, transport] () -> [SessionRecord] in
+        let task = Task { [weak self, client, apiKey, baseURL, model, transport, systemPrompt] () -> [SessionRecord] in
             // Process chunks concurrently (up to 3 at a time) off the main actor.
             let results: [(index: Int, records: [SessionRecord]?)] = await withTaskGroup(
                 of: (Int, [SessionRecord]?).self,
@@ -166,6 +186,7 @@ final class BatchTextCleaner {
                     group.addTask {
                         let cleaned = await Self.processChunk(
                             chunk,
+                            systemPrompt: systemPrompt,
                             client: client,
                             apiKey: apiKey,
                             model: model,
@@ -270,6 +291,7 @@ final class BatchTextCleaner {
 
     private nonisolated static func processChunk(
         _ records: [SessionRecord],
+        systemPrompt: String,
         client: OpenRouterClient,
         apiKey: String?,
         model: String,

@@ -103,6 +103,17 @@ final class BatchTextCleanerTests: XCTestCase {
         XCTAssertEqual(result?[0].cleanedText, "keep this")
     }
 
+    // MARK: - systemPrompt
+
+    func testSystemPromptListsCustomVocabulary() {
+        let prompt = BatchTextCleaner.systemPrompt(customVocabulary: "Postman: postmen\n\n  Swagger  \n")
+        XCTAssertTrue(prompt.contains("- Postman: postmen\n- Swagger"))
+    }
+
+    func testSystemPromptWithoutVocabularyHasNoTermsSection() {
+        XCTAssertFalse(BatchTextCleaner.systemPrompt(customVocabulary: " \n").contains("Known terms"))
+    }
+
     // MARK: - Failure threshold
 
     // MARK: - Speaker Codable
