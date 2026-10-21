@@ -66,7 +66,12 @@ final class ParakeetBackend: TranscriptionBackend, @unchecked Sendable {
             try vocab.write(to: tempURL, atomically: true, encoding: .utf8)
             let (context, ctcModels) = try await CustomVocabularyContext.loadWithCtcTokens(from: tempURL.path)
             guard !context.terms.isEmpty else { return nil }
-            return try await VocabularyBoostingSession(vocabulary: context, ctcModels: ctcModels)
+            // Similarity floors stop the spotter rescue from replacing non-English speech with vocabulary terms.
+            let config = VocabularyRescorer.Config(
+                spotterRescueMinSimilarity: 0.30,
+                spotterRescueMultiWordMinSimilarity: 0.50
+            )
+            return try await VocabularyBoostingSession(vocabulary: context, ctcModels: ctcModels, config: config)
         } catch {
             Log.transcription.error("Custom vocabulary disabled: \(error, privacy: .public)")
             return nil
