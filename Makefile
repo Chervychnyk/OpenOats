@@ -1,7 +1,7 @@
 APP := /Applications/OpenOats.app
 BUILT := dist/OpenOats.app
 
-.PHONY: install
+.PHONY: install clean-test-defaults
 # Build, ad-hoc sign, and replace the installed app. The old app goes to the Trash
 # because macOS App Management blocks overwriting it in place.
 install:
@@ -13,3 +13,7 @@ install:
 	ditto $(BUILT) $(APP)
 	codesign --verify --deep $(APP)
 	@echo "Installed $(APP)"
+
+# Remove the empty settings domains (com.openoats.test*) that test runs leave in ~/Library/Preferences.
+clean-test-defaults:
+	./scripts/clean_test_defaults.sh
