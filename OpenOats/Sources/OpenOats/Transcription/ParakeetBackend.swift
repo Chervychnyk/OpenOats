@@ -6,10 +6,13 @@ import Foundation
 final class ParakeetBackend: TranscriptionBackend, @unchecked Sendable {
     let displayName: String
     private let version: AsrModelVersion
+    private let customVocabularyText: String
     private var asrManager: AsrManager?
+    private var vocabularyBoosting: VocabularyBoostingSession?
 
     init(version: AsrModelVersion, customVocabulary: String = "") {
         self.version = version
+        self.customVocabularyText = customVocabulary
         switch version {
         case .v2: self.displayName = "Parakeet TDT v2"
         case .ultra: self.displayName = "Parakeet Ultra"
@@ -45,6 +48,29 @@ final class ParakeetBackend: TranscriptionBackend, @unchecked Sendable {
         let asr = AsrManager(config: .default)
         try await asr.loadModels(models)
         self.asrManager = asr
+        self.vocabularyBoosting = await Self.makeVocabularyBoosting(customVocabularyText, onStatus: onStatus)
+    }
+
+    /// Boosting is best-effort: a failed CTC model download or bad vocabulary must not block transcription.
+    private static func makeVocabularyBoosting(
+        _ text: String,
+        onStatus: @Sendable (String) -> Void
+    ) async -> VocabularyBoostingSession? {
+        let vocab = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !vocab.isEmpty else { return nil }
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("openoats-custom-vocabulary-\(UUID().uuidString).txt")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+        do {
+            onStatus("Loading custom vocabulary...")
+            try vocab.write(to: tempURL, atomically: true, encoding: .utf8)
+            let (context, ctcModels) = try await CustomVocabularyContext.loadWithCtcTokens(from: tempURL.path)
+            guard !context.terms.isEmpty else { return nil }
+            return try await VocabularyBoostingSession(vocabulary: context, ctcModels: ctcModels)
+        } catch {
+            Log.transcription.error("Custom vocabulary disabled: \(error, privacy: .public)")
+            return nil
+        }
     }
 
     func transcribe(_ samples: [Float], locale: Locale, previousContext: String? = nil) async throws -> String {
@@ -54,6 +80,15 @@ final class ParakeetBackend: TranscriptionBackend, @unchecked Sendable {
         // Fresh state per segment, as the old transcribe(samples) reset it after each call.
         var decoderState = TdtDecoderState.make(decoderLayers: await asrManager.decoderLayerCount)
         let result = try await asrManager.transcribe(samples, decoderState: &decoderState)
-        return result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        var text = result.text
+        if let vocabularyBoosting,
+           let rescored = await vocabularyBoosting.rescore(
+               text: text,
+               tokenTimings: result.tokenTimings ?? [],
+               audioSamples: samples
+           ) {
+            text = rescored.text
+        }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
