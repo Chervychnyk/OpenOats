@@ -79,6 +79,8 @@ final class WhisperKitManager: @unchecked Sendable {
 
         let options = DecodingOptions(
             language: languageCode,
+            // WhisperKit prefills <|en|> when language is nil unless detection is requested.
+            detectLanguage: languageCode == nil,
             wordTimestamps: false,
             promptTokens: promptTokens
         )
