@@ -59,6 +59,15 @@ final class BatchAudioTranscriberTests: XCTestCase {
         XCTAssertEqual(withoutOverride.count, Int(durationSeconds * 8_000), accuracy: 3_000)
     }
 
+    func testStatusIsRunningOnlyWhileAJobIsActive() {
+        XCTAssertTrue(BatchAudioTranscriber.Status.loading(model: "Whisper").isRunning)
+        XCTAssertTrue(BatchAudioTranscriber.Status.transcribing(progress: 0.5).isRunning)
+        XCTAssertFalse(BatchAudioTranscriber.Status.idle.isRunning)
+        XCTAssertFalse(BatchAudioTranscriber.Status.completed(sessionID: "s").isRunning)
+        XCTAssertFalse(BatchAudioTranscriber.Status.cancelled.isRunning)
+        XCTAssertFalse(BatchAudioTranscriber.Status.failed("x").isRunning)
+    }
+
     func testOverwriteGuardRejectsClearlyCollapsedReplacementTranscript() {
         let startedAt = Date(timeIntervalSince1970: 1_700_000_000)
         let existing = makeRecords(

@@ -292,6 +292,14 @@ actor BatchAudioTranscriber {
         case completed(sessionID: String)
         case cancelled
         case failed(String)
+
+        /// A finished, failed or cancelled job must not block starting a new one.
+        var isRunning: Bool {
+            switch self {
+            case .loading, .transcribing: true
+            case .idle, .completed, .cancelled, .failed: false
+            }
+        }
     }
 
     private(set) var status: Status = .idle

@@ -205,6 +205,9 @@ final class LiveSessionController {
     /// Tracks the session ID we last handled a batch completion for,
     /// preventing the auto-dismiss → re-poll cycle from re-triggering the notification.
     private var lastNotifiedBatchSessionID: String?
+    /// The engine keeps its final status until the next job, so only adopt it when it changes;
+    /// otherwise the poll undoes the auto-dismiss to `.idle`.
+    private var lastPolledBatchStatus: BatchAudioTranscriber.Status = .idle
     private var observedPeakAudioLevelSinceStart: Float = 0
     private var observedSystemHasEverCapturedFrames = false
     private var observedMicHasEverCapturedFrames = false
@@ -245,8 +248,14 @@ final class LiveSessionController {
                 let importing = await engine.isImporting
                 let activeBatchSessionID = await engine.activeSessionID
                 if status != .idle || coordinator.batchStatus != .idle {
-                    coordinator.batchStatus = status
-                    coordinator.batchIsImporting = importing
+                    // Assign only on change: every write re-renders observers and closes open menus.
+                    if status != lastPolledBatchStatus {
+                        lastPolledBatchStatus = status
+                        coordinator.batchStatus = status
+                    }
+                    if coordinator.batchIsImporting != importing {
+                        coordinator.batchIsImporting = importing
+                    }
 
                     if let pendingRecoveryDiagnostics {
                         if let activeBatchSessionID,
