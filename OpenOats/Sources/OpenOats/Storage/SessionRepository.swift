@@ -700,6 +700,9 @@ actor SessionRepository {
         let liveURL = dir.appendingPathComponent("transcript.live.jsonl")
         let backupURL = dir.appendingPathComponent("transcript.pre-batch.jsonl")
 
+        // Keep the first backup: a second re-transcription would otherwise replace the original with the previous batch output.
+        if let data = try? Data(contentsOf: backupURL), !data.isEmpty { return }
+
         let sourceURL: URL?
         if fm.fileExists(atPath: finalURL.path), let data = try? Data(contentsOf: finalURL), !data.isEmpty {
             sourceURL = finalURL

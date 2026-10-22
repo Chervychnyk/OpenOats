@@ -1192,6 +1192,31 @@ final class SessionRepositoryTests: XCTestCase {
         await repo.deleteSession(sessionID: sessionID)
     }
 
+    func testRepeatedBatchOverwriteKeepsFirstBackup() async {
+        let sessionID = "session_backup_repeated"
+        let startedAt = Date(timeIntervalSince1970: 1_000)
+        await repo.seedSession(
+            id: sessionID,
+            records: [SessionRecord(speaker: .you, text: "Original live", timestamp: startedAt)],
+            startedAt: startedAt
+        )
+
+        for text in ["First batch", "Second batch"] {
+            await repo.saveFinalTranscript(
+                sessionID: sessionID,
+                records: [SessionRecord(speaker: .you, text: text, timestamp: startedAt.addingTimeInterval(30))],
+                backupCurrentTranscript: true
+            )
+        }
+
+        let restored = await repo.restorePreBatchTranscript(sessionID: sessionID)
+        XCTAssertTrue(restored)
+        let transcript = await repo.loadTranscript(sessionID: sessionID)
+        XCTAssertEqual(transcript.map(\.text), ["Original live"])
+
+        await repo.deleteSession(sessionID: sessionID)
+    }
+
     func testRestorePreBatchTranscriptRestoresBackupIntoFinalTranscript() async {
         let sessionID = "session_restore_pre_batch"
         let startedAt = Date(timeIntervalSince1970: 1_000)
