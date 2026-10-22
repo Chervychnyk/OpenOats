@@ -44,10 +44,13 @@ struct HomeTimelineWorkspaceView: View {
             _ = await handleRequestedHomeNavigation(controller: controller)
         }
         .task(id: refreshTaskID(for: accessState)) {
-            await refreshCalendarEvents()
-            guard settings.calendarIntegrationEnabled else { return }
-            try? await Task.sleep(for: refreshInterval(for: accessState))
-            refreshTick &+= 1
+            // Poll inside the task: bumping view state per tick re-renders the
+            // whole workspace and closes any open submenu in the detail pane.
+            while !Task.isCancelled {
+                await refreshCalendarEvents()
+                guard settings.calendarIntegrationEnabled else { return }
+                try? await Task.sleep(for: refreshInterval(for: currentAccessState))
+            }
         }
         .onChange(of: settings.calendarIntegrationEnabled) {
             refreshTick &+= 1
@@ -362,7 +365,7 @@ struct HomeTimelineWorkspaceView: View {
     @MainActor
     private func refreshCalendarEvents() async {
         guard settings.calendarIntegrationEnabled else {
-            calendarEvents = []
+            if !calendarEvents.isEmpty { calendarEvents = [] }
             return
         }
 
@@ -374,12 +377,12 @@ struct HomeTimelineWorkspaceView: View {
         container.ensureCalendarIntegrationReady(enabled: settings.calendarIntegrationEnabled)
 
         guard let manager = container.calendarManager else {
-            calendarEvents = []
+            if !calendarEvents.isEmpty { calendarEvents = [] }
             return
         }
 
         guard manager.accessState == .authorized else {
-            calendarEvents = []
+            if !calendarEvents.isEmpty { calendarEvents = [] }
             return
         }
 
@@ -407,7 +410,7 @@ struct HomeTimelineWorkspaceView: View {
                 limit: remainingLimit
             )
         )
-        calendarEvents = combined
+        if calendarEvents != combined { calendarEvents = combined }
     }
 
     /// The current calendar access state, or nil when the `CalendarManager` has
