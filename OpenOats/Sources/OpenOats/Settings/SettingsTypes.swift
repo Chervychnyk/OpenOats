@@ -343,6 +343,7 @@ enum TranscriptionModel: String, CaseIterable, Identifiable {
     case whisperBase
     case whisperSmall
     case whisperLargeV3Turbo
+    case cohereTranscribe
     case assemblyAI
     case elevenLabsScribe
     case cohereTranscribeArabic
@@ -383,6 +384,7 @@ enum TranscriptionModel: String, CaseIterable, Identifiable {
         case .whisperBase: "Whisper Base"
         case .whisperSmall: "Whisper Small"
         case .whisperLargeV3Turbo: "Whisper Large v3 Turbo"
+        case .cohereTranscribe: "Cohere Transcribe"
         case .assemblyAI: "AssemblyAI"
         case .elevenLabsScribe: "ElevenLabs Scribe"
         case .cohereTranscribeArabic: "Cohere Transcribe Arabic"
@@ -401,6 +403,8 @@ enum TranscriptionModel: String, CaseIterable, Identifiable {
             "Whisper Small requires a one-time model download (~244 MB)."
         case .whisperLargeV3Turbo:
             "Whisper Large v3 Turbo requires a one-time model download (~800 MB)."
+        case .cohereTranscribe:
+            "Cohere Transcribe requires a one-time model download (~2.2 GB)."
         case .assemblyAI, .elevenLabsScribe:
             "Requires an API key. Enter it in Settings > Transcription."
         case .cohereTranscribeArabic:
@@ -415,6 +419,7 @@ enum TranscriptionModel: String, CaseIterable, Identifiable {
         case .whisperBase: 142_000_000
         case .whisperSmall: 244_000_000
         case .whisperLargeV3Turbo: 800_000_000
+        case .cohereTranscribe: 2_200_000_000
         case .parakeetV2, .parakeetV3, .parakeetUltra, .qwen3ASR06B: nil
         case .assemblyAI, .elevenLabsScribe, .cohereTranscribeArabic: nil
         }
@@ -428,7 +433,7 @@ enum TranscriptionModel: String, CaseIterable, Identifiable {
         switch self {
         case .qwen3ASR06B:
             "Language Hint"
-        case .parakeetV2, .parakeetV3, .parakeetUltra, .whisperBase, .whisperSmall, .whisperLargeV3Turbo:
+        case .parakeetV2, .parakeetV3, .parakeetUltra, .whisperBase, .whisperSmall, .whisperLargeV3Turbo, .cohereTranscribe:
             "Locale"
         case .assemblyAI, .elevenLabsScribe, .cohereTranscribeArabic:
             "Language Hint"
@@ -449,6 +454,8 @@ enum TranscriptionModel: String, CaseIterable, Identifiable {
             "Whisper auto-detects speech language. This setting is still saved with the session and markdown export."
         case .whisperLargeV3Turbo:
             "Whisper Large v3 Turbo auto-detects speech language. This setting is saved with session metadata and markdown export."
+        case .cohereTranscribe:
+            "Cohere Transcribe does not auto-detect language. Set the meeting language: en, fr, de, es, it, pt, nl, pl, el, ar, ja, zh, vi or ko. Other languages fall back to English."
         case .assemblyAI:
             "Optional language hint for AssemblyAI. Leave as en-US for English or set to your expected meeting language."
         case .elevenLabsScribe:
@@ -478,6 +485,7 @@ enum TranscriptionModel: String, CaseIterable, Identifiable {
         case .whisperBase: return WhisperKitBackend(variant: .base)
         case .whisperSmall: return WhisperKitBackend(variant: .small)
         case .whisperLargeV3Turbo: return WhisperKitBackend(variant: .largeV3Turbo)
+        case .cohereTranscribe: return CohereTranscribeBackend()
         case .assemblyAI: return AssemblyAIBackend(apiKey: apiKey, customVocabulary: customVocabulary)
         case .elevenLabsScribe: return ElevenLabsScribeBackend(apiKey: apiKey, customVocabulary: customVocabulary, removeFillerWords: removeFillerWords)
         case .cohereTranscribeArabic: return CohereTranscribeArabicBackend(apiKey: apiKey, customVocabulary: customVocabulary)
@@ -485,10 +493,10 @@ enum TranscriptionModel: String, CaseIterable, Identifiable {
     }
 
     /// Flush interval in 16kHz samples for streaming transcription.
-    /// Whisper models benefit from longer context windows (10s); Parakeet/Qwen are robust at 5s.
+    /// Whisper and Cohere (encoder-decoder) benefit from longer context windows (10s); Parakeet/Qwen are robust at 5s.
     var flushIntervalSamples: Int {
         switch self {
-        case .whisperBase, .whisperSmall, .whisperLargeV3Turbo:
+        case .whisperBase, .whisperSmall, .whisperLargeV3Turbo, .cohereTranscribe:
             10 * 16_000
         case .parakeetV2, .parakeetV3, .parakeetUltra, .qwen3ASR06B:
             5 * 16_000
@@ -499,7 +507,7 @@ enum TranscriptionModel: String, CaseIterable, Identifiable {
 
     /// Models suitable for offline batch re-transcription.
     static var batchSuitableModels: [TranscriptionModel] {
-        [.parakeetV2, .parakeetV3, .parakeetUltra, .whisperSmall, .whisperLargeV3Turbo, .qwen3ASR06B].filter(\.isAvailable)
+        [.parakeetV2, .parakeetV3, .parakeetUltra, .whisperSmall, .whisperLargeV3Turbo, .cohereTranscribe, .qwen3ASR06B].filter(\.isAvailable)
     }
 }
 

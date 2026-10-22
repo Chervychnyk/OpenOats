@@ -1,3 +1,4 @@
+import FluidAudio
 import XCTest
 @testable import OpenOatsKit
 
@@ -60,6 +61,19 @@ final class TranscriptionBackendTests: XCTestCase {
 
     func testMakeBackendParakeetUltra() {
         XCTAssertEqual(TranscriptionModel.parakeetUltra.makeBackend().displayName, "Parakeet Ultra")
+    }
+
+    func testMakeBackendCohereTranscribe() {
+        XCTAssertEqual(TranscriptionModel.cohereTranscribe.makeBackend().displayName, "Cohere Transcribe")
+        XCTAssertFalse(TranscriptionModel.cohereTranscribe.isCloud)
+        XCTAssertTrue(TranscriptionModel.batchSuitableModels.contains(.cohereTranscribe))
+    }
+
+    func testCohereTranscribeLanguageFallsBackToEnglish() {
+        XCTAssertEqual(CohereTranscribeBackend.language(for: Locale(identifier: "de-DE")), .german)
+        XCTAssertEqual(CohereTranscribeBackend.language(for: Locale(identifier: "ja")), .japanese)
+        XCTAssertEqual(CohereTranscribeBackend.language(for: Locale(identifier: "uk-UA")), .english)
+        XCTAssertEqual(CohereTranscribeBackend.language(for: Locale(identifier: "")), .english)
     }
 
     func testMakeBackendParakeetV2() {
