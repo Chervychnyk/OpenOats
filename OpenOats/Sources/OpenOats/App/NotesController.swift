@@ -871,6 +871,8 @@ final class NotesController {
               let batchAudioTranscriber = coordinator.batchAudioTranscriber else { return }
 
         let notesDirectory = URL(fileURLWithPath: settings.notesFolderPath)
+        // Show the job at once; the poll alone can miss a fast job that ends with the same status as the last one.
+        coordinator.batchStatus = .loading(model: model.displayName)
         Task {
             await batchAudioTranscriber.process(
                 sessionID: sessionID,

@@ -2011,6 +2011,12 @@ struct MeetingDetailPane<SessionFolderMenuItems: View>: View {
         .help(state.isPlayingAudio ? "Pause audio recording" : "Play audio recording")
     }
 
+    /// Cohere cannot detect the language, so name the one it will use; unsupported locales fall back to English.
+    private func retranscribeTitle(_ model: TranscriptionModel) -> String {
+        guard model == .cohereTranscribe else { return model.displayName }
+        return "\(model.displayName) (\(CohereTranscribeBackend.language(for: settings.locale).englishName))"
+    }
+
     @ViewBuilder
     private func transcriptMaintenanceMenu(controller: NotesController, state: NotesState) -> some View {
         let isBatchBusy = coordinator.batchStatus.isRunning
@@ -2022,7 +2028,7 @@ struct MeetingDetailPane<SessionFolderMenuItems: View>: View {
                     controller.rerunBatchTranscription(model: settings.batchTranscriptionModel, settings: settings)
                 } label: {
                     Label(
-                        "Re-transcribe with \(settings.batchTranscriptionModel.displayName)",
+                        "Re-transcribe with \(retranscribeTitle(settings.batchTranscriptionModel))",
                         systemImage: "arrow.trianglehead.2.clockwise.rotate.90"
                     )
                 }
@@ -2035,7 +2041,7 @@ struct MeetingDetailPane<SessionFolderMenuItems: View>: View {
                                 container.ensureRecordingServicesInitialized(settings: settings, coordinator: coordinator)
                                 controller.rerunBatchTranscription(model: model, settings: settings)
                             } label: {
-                                Label(model.displayName, systemImage: model == settings.batchTranscriptionModel ? "checkmark" : "")
+                                Label(retranscribeTitle(model), systemImage: model == settings.batchTranscriptionModel ? "checkmark" : "")
                             }
                             .disabled(isBatchBusy)
                         }
