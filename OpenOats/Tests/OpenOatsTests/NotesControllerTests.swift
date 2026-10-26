@@ -415,6 +415,125 @@ final class NotesControllerTests: XCTestCase {
         XCTAssertNotNil(controller.state.loadedNotes)
         XCTAssertEqual(controller.state.notesGenerationStatus, .completed)
         XCTAssertTrue(controller.state.loadedNotes?.markdown.contains("Test Notes") ?? false)
+        XCTAssertFalse(controller.state.isEditingManualNotes, "Generated notes should open rendered, not in the editor")
+    }
+
+    func testEditGeneratedNotesForSessionWithTranscript() async {
+        let (root, _) = makeTempDirs()
+        let (controller, coordinator) = makeController(root: root)
+        let sessionID = "session_test_edit_generated"
+
+        await seedGeneratedNotes(coordinator: coordinator, sessionID: sessionID, markdown: "# Notes\n\n## Confdent Answers")
+        controller.selectSession(sessionID)
+        try? await Task.sleep(for: .milliseconds(200))
+
+        XCTAssertFalse(controller.state.loadedTranscript.isEmpty)
+        XCTAssertFalse(controller.state.isEditingManualNotes)
+        XCTAssertFalse(controller.hasUnsavedManualNotesChanges)
+
+        controller.startManualNotesEditing()
+        controller.updateManualNotesDraft("# Notes\n\n## Confident Answers")
+        XCTAssertTrue(controller.hasUnsavedManualNotesChanges)
+
+        controller.saveManualNotes()
+        try? await Task.sleep(for: .milliseconds(250))
+
+        let savedNotes = await coordinator.sessionRepository.loadNotes(sessionID: sessionID)
+        XCTAssertEqual(savedNotes?.markdown, "# Notes\n\n## Confident Answers")
+        XCTAssertEqual(savedNotes?.template.id, TemplateStore.genericID, "Editing keeps the original template")
+        XCTAssertEqual(controller.state.loadedNotes?.markdown, "# Notes\n\n## Confident Answers")
+        XCTAssertFalse(controller.state.isEditingManualNotes)
+        XCTAssertFalse(controller.hasUnsavedManualNotesChanges)
+    }
+
+    func testCancelEditingGeneratedNotesRestoresSavedMarkdown() async {
+        let (root, _) = makeTempDirs()
+        let (controller, coordinator) = makeController(root: root)
+        let sessionID = "session_test_cancel_edit_generated"
+
+        await seedGeneratedNotes(coordinator: coordinator, sessionID: sessionID, markdown: "# Original")
+        controller.selectSession(sessionID)
+        try? await Task.sleep(for: .milliseconds(200))
+
+        controller.startManualNotesEditing()
+        controller.updateManualNotesDraft("# Changed")
+        controller.discardManualNotesDraft()
+
+        XCTAssertEqual(controller.state.manualNotesDraft, "# Original")
+        XCTAssertFalse(controller.state.isEditingManualNotes)
+        let savedNotes = await coordinator.sessionRepository.loadNotes(sessionID: sessionID)
+        XCTAssertEqual(savedNotes?.markdown, "# Original")
+    }
+
+    func testInsertImageWhileEditingGeneratedNotesKeepsDraft() async {
+        let (root, _) = makeTempDirs()
+        let (controller, coordinator) = makeController(root: root)
+        let sessionID = "session_test_generated_notes_image"
+
+        await seedGeneratedNotes(coordinator: coordinator, sessionID: sessionID, markdown: "# Original")
+        controller.selectSession(sessionID)
+        try? await Task.sleep(for: .milliseconds(200))
+
+        controller.startManualNotesEditing()
+        controller.updateManualNotesDraft("# Edited")
+        controller.insertImage(imageData: makePNGData())
+        try? await Task.sleep(for: .milliseconds(250))
+
+        let savedNotes = await coordinator.sessionRepository.loadNotes(sessionID: sessionID)
+        XCTAssertTrue(savedNotes?.markdown.hasPrefix("# Edited") ?? false)
+        XCTAssertTrue(savedNotes?.markdown.contains("![](images/") ?? false)
+        XCTAssertEqual(controller.state.manualNotesDraft, savedNotes?.markdown)
+    }
+
+    func testUnsavedGeneratedNotesEditSurvivesSessionSwitch() async {
+        let (root, _) = makeTempDirs()
+        let (controller, coordinator) = makeController(root: root)
+
+        await seedGeneratedNotes(coordinator: coordinator, sessionID: "generated", markdown: "# Original")
+        await seedSession(coordinator: coordinator, sessionID: "other", title: "Other Session")
+
+        controller.selectSession("generated")
+        try? await Task.sleep(for: .milliseconds(200))
+        controller.startManualNotesEditing()
+        controller.updateManualNotesDraft("# Unsaved edit")
+
+        controller.selectSession("other")
+        try? await Task.sleep(for: .milliseconds(200))
+        controller.selectSession("generated")
+        try? await Task.sleep(for: .milliseconds(200))
+
+        XCTAssertEqual(controller.state.manualNotesDraft, "# Unsaved edit")
+        XCTAssertTrue(controller.state.isEditingManualNotes)
+        XCTAssertEqual(controller.state.loadedNotes?.markdown, "# Original")
+    }
+
+    func testRegenerateNotesLeavesEditor() async {
+        let (root, notes) = makeTempDirs()
+        let (controller, coordinator) = makeController(root: root)
+        let settings = makeSettings(notesDirectory: notes)
+        let sessionID = "session_test_regenerate_leaves_editor"
+
+        await seedGeneratedNotes(coordinator: coordinator, sessionID: sessionID, markdown: "# Original")
+        controller.selectSession(sessionID)
+        try? await Task.sleep(for: .milliseconds(200))
+
+        controller.startManualNotesEditing()
+        controller.regenerateNotes(settings: settings)
+
+        XCTAssertFalse(controller.state.isEditingManualNotes)
+        // Let the scripted generation finish so it does not leak into later tests.
+        try? await Task.sleep(for: .milliseconds(500))
+    }
+
+    private func seedGeneratedNotes(coordinator: AppCoordinator, sessionID: String, markdown: String) async {
+        await seedSession(coordinator: coordinator, sessionID: sessionID)
+        let template = coordinator.templateStore.snapshot(
+            of: coordinator.templateStore.template(for: TemplateStore.genericID) ?? TemplateStore.builtInTemplates.first!
+        )
+        await coordinator.sessionRepository.saveNotes(
+            sessionID: sessionID,
+            notes: GeneratedNotes(template: template, generatedAt: Date(), markdown: markdown)
+        )
     }
 
     func testGenerateNotesSavesNotes() async {

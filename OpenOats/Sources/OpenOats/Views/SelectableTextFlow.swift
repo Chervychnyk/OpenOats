@@ -14,6 +14,10 @@ struct SelectableTextFlow: NSViewRepresentable {
     /// true if handled; returning false falls back to the system behavior.
     /// When nil, all links use the system behavior (open URL).
     var onLinkClick: ((URL, CGRect) -> Bool)? = nil
+    /// When set, the text is only replaced when this key changes. Needed for
+    /// text tables: `NSTextTableBlock` compares by identity, so a rebuilt but
+    /// identical string never `isEqual` the stored one.
+    var contentKey: String? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -36,7 +40,12 @@ struct SelectableTextFlow: NSViewRepresentable {
     func updateNSView(_ nsView: NSTextView, context: Context) {
         context.coordinator.onLinkClick = onLinkClick
         guard let storage = nsView.textStorage else { return }
-        guard !storage.isEqual(to: attributedText) else { return }
+        if let contentKey {
+            guard contentKey != context.coordinator.contentKey else { return }
+            context.coordinator.contentKey = contentKey
+        } else {
+            guard !storage.isEqual(to: attributedText) else { return }
+        }
 
         let previousSelection = nsView.selectedRanges
         storage.setAttributedString(attributedText)
@@ -69,6 +78,7 @@ struct SelectableTextFlow: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var onLinkClick: ((URL, CGRect) -> Bool)?
+        var contentKey: String?
 
         func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
             guard let onLinkClick else { return false }
@@ -235,6 +245,120 @@ enum MarkdownTextFlow {
             .foregroundColor: NSColor.labelColor,
             .paragraphStyle: style,
         ])
+    }
+
+    /// Renders one markdown paragraph: pipe tables and `*`/`-`/`1.` list items
+    /// get block layout, everything else goes through `inlineMarkdown`.
+    static func block(_ text: String) -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        var plainLines: [String] = []
+        var tableLines: [String] = []
+
+        func append(_ piece: NSAttributedString) {
+            if result.length > 0 { result.append(NSAttributedString(string: "\n")) }
+            result.append(piece)
+        }
+        func flushPlain() {
+            guard !plainLines.isEmpty else { return }
+            append(inlineMarkdown(plainLines.joined(separator: "\n")))
+            plainLines.removeAll()
+        }
+        func flushTable() {
+            guard !tableLines.isEmpty else { return }
+            append(table(tableLines))
+            tableLines.removeAll()
+        }
+
+        for line in text.components(separatedBy: "\n") {
+            if line.trimmingCharacters(in: .whitespaces).hasPrefix("|") {
+                flushPlain()
+                tableLines.append(line)
+            } else if let item = listItem(line) {
+                flushPlain()
+                flushTable()
+                append(item)
+            } else {
+                flushTable()
+                plainLines.append(line)
+            }
+        }
+        flushPlain()
+        flushTable()
+        return result
+    }
+
+    private static func listItem(_ line: String) -> NSAttributedString? {
+        guard let match = line.firstMatch(of: /^(\s*)([*+-]|\d+[.)])\s+(.*)$/) else { return nil }
+        let step: CGFloat = 18
+        let indent = CGFloat(match.1.count / 2) * step
+        let marker = match.2.first?.isNumber == true ? String(match.2) : "•"
+
+        let style = NSMutableParagraphStyle()
+        style.lineBreakMode = .byWordWrapping
+        style.firstLineHeadIndent = indent
+        style.headIndent = indent + step
+        style.tabStops = [NSTextTab(textAlignment: .left, location: indent + step)]
+
+        let result = NSMutableAttributedString(string: "\(marker)\t", attributes: [
+            .font: NSFont.systemFont(ofSize: 13),
+            .foregroundColor: NSColor.secondaryLabelColor,
+        ])
+        result.append(inlineMarkdown(String(match.3)))
+        result.addAttribute(.paragraphStyle, value: style, range: NSRange(location: 0, length: result.length))
+        return result
+    }
+
+    private static func table(_ lines: [String]) -> NSAttributedString {
+        let rows = lines
+            .map(tableCells)
+            .filter { cells in !cells.allSatisfy { $0.wholeMatch(of: /:?-+:?/) != nil } }
+        let columns = rows.map(\.count).max() ?? 0
+        guard columns > 0 else { return inlineMarkdown(lines.joined(separator: "\n")) }
+
+        let table = NSTextTable()
+        table.numberOfColumns = columns
+        table.collapsesBorders = true
+        table.setContentWidth(100, type: .percentageValueType)
+
+        let result = NSMutableAttributedString()
+        for (rowIndex, cells) in rows.enumerated() {
+            for column in 0..<columns {
+                let cellBlock = NSTextTableBlock(
+                    table: table, startingRow: rowIndex, rowSpan: 1, startingColumn: column, columnSpan: 1
+                )
+                cellBlock.setWidth(0.5, type: .absoluteValueType, for: .border)
+                cellBlock.setBorderColor(.separatorColor)
+                cellBlock.setWidth(6, type: .absoluteValueType, for: .padding)
+                if rowIndex == 0 {
+                    cellBlock.backgroundColor = .quaternaryLabelColor
+                }
+
+                let style = NSMutableParagraphStyle()
+                style.lineBreakMode = .byWordWrapping
+                style.textBlocks = [cellBlock]
+
+                // An empty last cell would have no characters to carry its table block, so it gets a space.
+                let text = column < cells.count && !cells[column].isEmpty ? cells[column] : " "
+                let cell = NSMutableAttributedString(attributedString: inlineMarkdown(text))
+                if rowIndex == 0 {
+                    cell.applyFontTraits(.boldFontMask, range: NSRange(location: 0, length: cell.length))
+                }
+                // Each cell is its own paragraph; the last one's newline comes from the caller's separator.
+                if rowIndex < rows.count - 1 || column < columns - 1 {
+                    cell.append(NSAttributedString(string: "\n"))
+                }
+                cell.addAttribute(.paragraphStyle, value: style, range: NSRange(location: 0, length: cell.length))
+                result.append(cell)
+            }
+        }
+        return result
+    }
+
+    private static func tableCells(_ line: String) -> [String] {
+        var trimmed = line.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix("|") { trimmed.removeFirst() }
+        if trimmed.hasSuffix("|") { trimmed.removeLast() }
+        return trimmed.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
     }
 
     static func inlineMarkdown(_ text: String) -> NSAttributedString {

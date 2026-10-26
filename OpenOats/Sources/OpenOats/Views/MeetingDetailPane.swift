@@ -2167,6 +2167,15 @@ struct MeetingDetailPane<SessionFolderMenuItems: View>: View {
                 }
             }
         } else if let notes = state.loadedNotes {
+            if !state.isEditingManualNotes {
+                Button {
+                    controller.startManualNotesEditing()
+                } label: {
+                    Label("Edit Notes", systemImage: "square.and.pencil")
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.bordered)
+            }
             Menu {
                 ForEach(controller.availableTemplates) { template in
                     Button {
@@ -2185,10 +2194,9 @@ struct MeetingDetailPane<SessionFolderMenuItems: View>: View {
             .menuStyle(.button)
             .buttonStyle(.bordered)
             .fixedSize()
-            .disabled(controller.isAnyGenerationInProgress)
-            .help(controller.isAnyGenerationInProgress
-                ? "Generating notes for \"\(controller.generatingSessionName)\"..."
-                : "Click to regenerate, or pick a different template")
+            // Regenerating replaces the notes, which would drop unsaved edits.
+            .disabled(controller.isAnyGenerationInProgress || controller.hasUnsavedManualNotesChanges)
+            .help(regenerateNotesHelp(controller: controller))
             attachmentInsertButton(controller: controller, state: state)
             imageInsertMenu(controller: controller, state: state)
             if settings.appleNotesEnabled {
@@ -2201,6 +2209,16 @@ struct MeetingDetailPane<SessionFolderMenuItems: View>: View {
                 appleNotesSyncButton(controller: controller, state: state)
             }
         }
+    }
+
+    private func regenerateNotesHelp(controller: NotesController) -> String {
+        if controller.isAnyGenerationInProgress {
+            return "Generating notes for \"\(controller.generatingSessionName)\"..."
+        }
+        if controller.hasUnsavedManualNotesChanges {
+            return "Save or cancel your edits before regenerating"
+        }
+        return "Click to regenerate, or pick a different template"
     }
 
     @ViewBuilder
@@ -2521,6 +2539,8 @@ struct MeetingDetailPane<SessionFolderMenuItems: View>: View {
                     } else {
                         notesNoTranscriptState(controller: controller, state: state)
                     }
+                } else if state.isEditingManualNotes {
+                    notesEditor(controller: controller, state: state, banner: nil)
                 } else if let notes = state.loadedNotes {
                     notesContentView(
                         controller: controller,
@@ -2757,6 +2777,73 @@ struct MeetingDetailPane<SessionFolderMenuItems: View>: View {
         }
     }
 
+    /// Raw markdown editor for a session's notes, shared by transcript-less
+    /// sessions and editing generated notes.
+    private func notesEditor(controller: NotesController, state: NotesState, banner: String?) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                if let banner {
+                    HStack(spacing: 8) {
+                        Image(systemName: "waveform")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.secondary)
+                        Text(banner)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    Button {
+                        controller.saveManualNotes()
+                    } label: {
+                        Label("Save Notes", systemImage: "square.and.arrow.down")
+                            .font(.system(size: 12))
+                            .frame(maxHeight: .infinity)
+                    }
+                    .buttonStyle(OpenOatsProminentButtonStyle())
+                    .disabled(!controller.hasUnsavedManualNotesChanges)
+
+                    // Also leaves the editor, so it stays enabled without changes.
+                    Button {
+                        controller.discardManualNotesDraft()
+                    } label: {
+                        Label("Cancel", systemImage: "arrow.uturn.backward")
+                            .font(.system(size: 12))
+                            .frame(maxHeight: .infinity)
+                    }
+                    .buttonStyle(OpenOatsProminentButtonStyle(color: Color(nsColor: .systemGray)))
+                }
+                // Both buttons share the custom style so they can stretch to the taller icon's height.
+                .controlSize(.mini)
+                .fixedSize(horizontal: false, vertical: true)
+
+                if !state.loadedAttachments.isEmpty {
+                    attachmentsSection(controller: controller, attachments: state.loadedAttachments)
+                }
+
+                TextEditor(text: Binding(
+                    get: { state.manualNotesDraft },
+                    set: { controller.updateManualNotesDraft($0) }
+                ))
+                .font(.system(size: 13))
+                .scrollContentBackground(.hidden)
+                .frame(minHeight: state.selectedMeetingFamily != nil ? 220 : 320)
+                .padding(10)
+                .background(Color(nsColor: .textBackgroundColor).opacity(0.85))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .strokeBorder(.quaternary, lineWidth: 1)
+                )
+                .accessibilityIdentifier("notes.manualEditor")
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 24)
+        }
+    }
+
     @ViewBuilder
     private func notesNoTranscriptState(controller: NotesController, state: NotesState) -> some View {
         let isEmbeddedMeetingFamilyDetail = state.selectedMeetingFamily != nil
@@ -2778,60 +2865,7 @@ struct MeetingDetailPane<SessionFolderMenuItems: View>: View {
         )
 
         if state.isEditingManualNotes {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "waveform")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(.secondary)
-                        Text(editorBanner)
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                    }
-
-                    HStack(spacing: 8) {
-                        Button {
-                            controller.saveManualNotes()
-                        } label: {
-                            Label("Save Notes", systemImage: "square.and.arrow.down")
-                        }
-                        .buttonStyle(OpenOatsProminentButtonStyle())
-                        .disabled(!controller.hasUnsavedManualNotesChanges)
-
-                        Button {
-                            controller.discardManualNotesDraft()
-                        } label: {
-                            Label("Revert", systemImage: "arrow.uturn.backward")
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(!controller.hasUnsavedManualNotesChanges)
-                    }
-                    .controlSize(.small)
-
-                    if !state.loadedAttachments.isEmpty {
-                        attachmentsSection(controller: controller, attachments: state.loadedAttachments)
-                    }
-
-                    TextEditor(text: Binding(
-                        get: { state.manualNotesDraft },
-                        set: { controller.updateManualNotesDraft($0) }
-                    ))
-                    .font(.system(size: 13))
-                    .scrollContentBackground(.hidden)
-                    .frame(minHeight: isEmbeddedMeetingFamilyDetail ? 220 : 320)
-                    .padding(10)
-                    .background(Color(nsColor: .textBackgroundColor).opacity(0.85))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .strokeBorder(.quaternary, lineWidth: 1)
-                    )
-                    .accessibilityIdentifier("notes.manualEditor")
-                }
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 24)
-            }
+            notesEditor(controller: controller, state: state, banner: editorBanner)
         } else if isEmbeddedMeetingFamilyDetail {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
@@ -3590,12 +3624,13 @@ struct MeetingDetailPane<SessionFolderMenuItems: View>: View {
     private func markdownContent(_ markdown: String, sessionDirectory: URL? = nil) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             let items = notesFlowItems(markdown)
-            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+            ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                 switch item {
                 case .flow(let attributed):
                     SelectableTextFlow(
                         attributedText: attributed,
-                        onLinkClick: { url, _ in openNotesLink(url, sessionDirectory: sessionDirectory) }
+                        onLinkClick: { url, _ in openNotesLink(url, sessionDirectory: sessionDirectory) },
+                        contentKey: "\(index)\n\(markdown)"
                     )
                     .frame(maxWidth: .infinity, alignment: .leading)
                 case .image(let altText, let relativePath):
@@ -3634,7 +3669,7 @@ struct MeetingDetailPane<SessionFolderMenuItems: View>: View {
             for block in NoteAssetMarkdownParser.parseBody(section.body) {
                 switch block {
                 case .text(let text):
-                    appendBlock(MarkdownTextFlow.inlineMarkdown(text))
+                    appendBlock(MarkdownTextFlow.block(text))
                 case .image(let altText, let relativePath):
                     flushFlow()
                     items.append(.image(altText: altText, relativePath: relativePath))
@@ -3897,7 +3932,7 @@ struct MeetingDetailPane<SessionFolderMenuItems: View>: View {
             for block in NoteAssetMarkdownParser.parseBody(section.body) {
                 switch block {
                 case .text(let text):
-                    appendBlock(MarkdownTextFlow.inlineMarkdown(text))
+                    appendBlock(MarkdownTextFlow.block(text))
                 case .image(let altText, let relativePath):
                     let name = altText.isEmpty ? (relativePath as NSString).lastPathComponent : altText
                     appendBlock(MarkdownTextFlow.inlineMarkdown("*[Image: \(name)]*"))

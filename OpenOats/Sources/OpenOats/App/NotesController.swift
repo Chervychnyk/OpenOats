@@ -578,6 +578,8 @@ final class NotesController {
             state.selectedTemplate = template
         }
         state.loadedNotes = nil
+        // Leave the editor so a cancelled generation lands on the empty state, not a stale draft.
+        state.isEditingManualNotes = false
         generateNotes(sessionID: sessionID, settings: settings)
     }
 
@@ -615,7 +617,8 @@ final class NotesController {
                 state.loadedNotes = notes
                 state.manualNotesDraft = notes.markdown
                 state.savedManualNotesMarkdown = notes.markdown
-                state.isEditingManualNotes = notes.markdown.isEmpty == false || state.loadedTranscript.isEmpty
+                // Freshly generated notes open rendered; only a transcript-less session stays in the editor.
+                state.isEditingManualNotes = state.loadedTranscript.isEmpty
                 state.notesGenerationStatus = .completed
             } else {
                 // User has moved away — show the blue "unread" badge in the sidebar
@@ -677,9 +680,9 @@ final class NotesController {
         guard let sessionID = state.selectedSessionID, !insertions.isEmpty else { return }
 
         Task {
-            let isManualNotesSession = state.loadedTranscript.isEmpty
+            let insertsIntoDraft = state.loadedTranscript.isEmpty || state.isEditingManualNotes
             let existingNotes = state.loadedNotes
-            var updatedMarkdown = isManualNotesSession
+            var updatedMarkdown = insertsIntoDraft
                 ? state.manualNotesDraft
                 : (existingNotes?.markdown ?? "")
             var insertedAnyAssets = false
@@ -1230,8 +1233,7 @@ final class NotesController {
     }
 
     var hasUnsavedManualNotesChanges: Bool {
-        guard isManualNotesSession else { return false }
-        return state.manualNotesDraft != state.savedManualNotesMarkdown
+        state.selectedSessionID != nil && state.manualNotesDraft != state.savedManualNotesMarkdown
     }
 
     // MARK: - Private
@@ -1250,7 +1252,7 @@ final class NotesController {
     }
 
     private func persistCurrentManualNotesDraftIfNeeded() {
-        guard let sessionID = state.selectedSessionID, state.loadedTranscript.isEmpty else { return }
+        guard let sessionID = state.selectedSessionID else { return }
         if state.manualNotesDraft.isEmpty || state.manualNotesDraft == state.savedManualNotesMarkdown {
             unsavedManualNotesDraftsBySessionID.removeValue(forKey: sessionID)
         } else {
