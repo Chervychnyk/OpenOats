@@ -368,6 +368,13 @@ private struct GeneralSettingsTab: View {
                             .font(.system(size: 11))
                             .foregroundStyle(diagnosticsExportHadError ? .red : .secondary)
                     }
+
+                    Toggle("Log live suggestions for evals", isOn: $settings.llmTraceLoggingEnabled)
+                        .font(.system(size: 12))
+
+                    Text("Saves each live suggestion and Sidecast prompt, response and latency to ~/Library/Application Support/OpenOats/llm-traces. Prompts contain transcript text and stay there after a session is deleted.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
                 }
             }
             .formStyle(.grouped)

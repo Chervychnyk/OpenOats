@@ -978,6 +978,18 @@ final class SettingsStore {
         }
     }
 
+    @ObservationIgnored nonisolated(unsafe) private var _llmTraceLoggingEnabled: Bool
+    /// Records live suggestion and Sidecast prompts, responses and latency for offline evals.
+    var llmTraceLoggingEnabled: Bool {
+        get { access(keyPath: \.llmTraceLoggingEnabled); return _llmTraceLoggingEnabled }
+        set {
+            withMutation(keyPath: \.llmTraceLoggingEnabled) {
+                _llmTraceLoggingEnabled = newValue
+                defaults.set(newValue, forKey: "llmTraceLoggingEnabled")
+            }
+        }
+    }
+
     @ObservationIgnored nonisolated(unsafe) private var _hasShownAutoDetectExplanation: Bool
     var hasShownAutoDetectExplanation: Bool {
         get { access(keyPath: \.hasShownAutoDetectExplanation); return _hasShownAutoDetectExplanation }
@@ -1613,6 +1625,7 @@ final class SettingsStore {
             : (silenceSeconds < 60)
         self._detectionLogEnabled = defaults.bool(forKey: "detectionLogEnabled")
         self._diagnosticLoggingEnabled = defaults.bool(forKey: "diagnosticLoggingEnabled")
+        self._llmTraceLoggingEnabled = defaults.bool(forKey: "llmTraceLoggingEnabled")
         self._hasShownAutoDetectExplanation = defaults.bool(forKey: "hasShownAutoDetectExplanation")
         self._hasShownCameraDetectExplanation = defaults.bool(forKey: "hasShownCameraDetectExplanation")
         self._calendarIntegrationEnabled = defaults.bool(forKey: "calendarIntegrationEnabled")

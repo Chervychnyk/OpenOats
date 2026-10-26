@@ -81,14 +81,45 @@ final class SidecastEngine {
                 evidence: evidence
             )
 
-            do {
-                let useWebSearch = self.shouldUseWebSearch(for: personas)
-                let response = try await self.client.complete(
-                    apiKey: self.llmApiKey,
-                    model: self.settings.activeRealtimeModel,
+            let model = self.settings.activeRealtimeModel
+            let maxTokens = self.settings.sidecastMaxTokens
+            let temperature = self.settings.sidecastTemperature
+            let useWebSearch = self.shouldUseWebSearch(for: personas)
+            let traceEnabled = self.settings.llmTraceLoggingEnabled
+            let provider = self.settings.llmProvider.rawValue
+            let startedAt = Date.now
+            let clockStart = ContinuousClock.now
+            var response = ""
+            func trace(_ outcome: String, error: Error? = nil, shown: [SidecastMessage] = []) {
+                guard traceEnabled else { return }
+                let entry = LLMTrace(
+                    id: generationID,
+                    engine: "sidecast",
+                    startedAt: startedAt,
+                    provider: provider,
+                    model: model,
+                    maxTokens: maxTokens,
+                    temperature: temperature,
+                    webSearch: useWebSearch,
+                    triggerKind: nil,
                     messages: prompt,
-                    maxTokens: self.settings.sidecastMaxTokens,
-                    temperature: self.settings.sidecastTemperature,
+                    response: response,
+                    firstTokenMs: nil,
+                    totalMs: LLMTraceLog.milliseconds(since: clockStart),
+                    outcome: outcome,
+                    error: error.map { "\($0)" },
+                    shown: shown.map { "\($0.personaName): \($0.text)" }
+                )
+                Task { await LLMTraceLog.shared.append(entry) }
+            }
+
+            do {
+                response = try await self.client.complete(
+                    apiKey: self.llmApiKey,
+                    model: model,
+                    messages: prompt,
+                    maxTokens: maxTokens,
+                    temperature: temperature,
                     baseURL: self.llmBaseURL,
                     webSearch: useWebSearch,
                     transport: self.settings.activeLLMTransport,
@@ -97,8 +128,9 @@ final class SidecastEngine {
                 )
                 let decoded = try self.decodeResponse(response)
 
-                await MainActor.run {
-                    self.apply(
+                let shown = await MainActor.run {
+                    defer { self.finishGeneration(generationID) }
+                    return self.apply(
                         decoded,
                         personas: personas,
                         evidence: evidence,
@@ -106,14 +138,21 @@ final class SidecastEngine {
                         recentTexts: recentTexts,
                         lastSpokenAtByPersona: lastSpoken
                     )
-                    self.finishGeneration(generationID)
                 }
+                trace("completed", shown: shown)
             } catch is CancellationError {
+                trace("superseded")
                 await MainActor.run {
                     self.finishGeneration(generationID)
                 }
             } catch {
                 Log.sidecast.error("Generation failed: \(error, privacy: .public)")
+                if !response.isEmpty {
+                    // The request succeeded, so only decoding can have failed.
+                    trace("parse_error", error: error)
+                } else {
+                    trace(Task.isCancelled ? "superseded" : "failed", error: error)
+                }
                 await MainActor.run {
                     self.finishGeneration(generationID)
                 }
@@ -150,7 +189,7 @@ final class SidecastEngine {
         utterance: Utterance,
         recentTexts: [String],
         lastSpokenAtByPersona: [UUID: Date]
-    ) {
+    ) -> [SidecastMessage] {
         let personaByID = Dictionary(uniqueKeysWithValues: personas.map { ($0.id, $0) })
         let topBreadcrumb = evidence.first?.displayBreadcrumb ?? ""
         let now = utterance.timestamp
@@ -207,7 +246,7 @@ final class SidecastEngine {
             dedupeCorpus.append(cleanedText)
         }
 
-        guard !accepted.isEmpty else { return }
+        guard !accepted.isEmpty else { return [] }
 
         var updated = Dictionary(uniqueKeysWithValues: messages.map { ($0.personaID, $0) })
         for message in accepted {
@@ -223,6 +262,7 @@ final class SidecastEngine {
             if lhs.timestamp != rhs.timestamp { return lhs.timestamp > rhs.timestamp }
             return lhs.personaName < rhs.personaName
         }
+        return accepted
     }
 
     private static let sanitizePatterns: [(NSRegularExpression, String)] = {

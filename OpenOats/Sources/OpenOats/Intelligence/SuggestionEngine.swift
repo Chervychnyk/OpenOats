@@ -388,25 +388,55 @@ final class SuggestionEngine {
             contextPacks: contextPacks
         )
 
+        let model = settings.activeRealtimeModel
+        let maxTokens = 200
+        let startedAt = Date.now
+        let clockStart = ContinuousClock.now
+        var firstTokenMs: Int?
+        var accumulated = ""
+        func trace(_ outcome: String, error: Error? = nil) {
+            guard settings.llmTraceLoggingEnabled else { return }
+            let entry = LLMTrace(
+                id: suggestionID,
+                engine: "suggestion",
+                startedAt: startedAt,
+                provider: settings.llmProvider.rawValue,
+                model: model,
+                maxTokens: maxTokens,
+                temperature: nil,
+                webSearch: false,
+                triggerKind: triggerKind.rawValue,
+                messages: messages,
+                response: accumulated,
+                firstTokenMs: firstTokenMs,
+                totalMs: LLMTraceLog.milliseconds(since: clockStart),
+                outcome: outcome,
+                error: error.map { "\($0)" },
+                shown: outcome == "completed" ? [accumulated] : []
+            )
+            Task { await LLMTraceLog.shared.append(entry) }
+        }
+
         do {
             let stream = await client.streamCompletion(
                 apiKey: llmApiKey,
-                model: settings.activeRealtimeModel,
+                model: model,
                 messages: messages,
-                maxTokens: 200,
+                maxTokens: maxTokens,
                 baseURL: llmBaseURL(forRealtime: true),
                 transport: settings.activeLLMTransport,
                 disableReasoning: true
             )
 
-            var accumulated = ""
             for try await chunk in stream {
                 guard !Task.isCancelled else { break }
+                if firstTokenMs == nil { firstTokenMs = LLMTraceLog.milliseconds(since: clockStart) }
                 accumulated += chunk
                 if let idx = activeSuggestions.firstIndex(where: { $0.id == suggestionID }) {
                     activeSuggestions[idx].synthesizedText = accumulated
                 }
             }
+            trace(Task.isCancelled ? "superseded" : "completed")
 
             if let idx = activeSuggestions.firstIndex(where: { $0.id == suggestionID }) {
                 if Task.isCancelled {
@@ -428,8 +458,10 @@ final class SuggestionEngine {
             }
         } catch is CancellationError {
             markSuperseded(suggestionID)
+            trace("superseded")
         } catch {
             Log.suggestionEngine.error("Synthesis stream error: \(error, privacy: .public)")
+            trace(Task.isCancelled ? "superseded" : "failed", error: error)
             if !Task.isCancelled {
                 if let idx = activeSuggestions.firstIndex(where: { $0.id == suggestionID }),
                    activeSuggestions[idx].lifecycle != .superseded {
